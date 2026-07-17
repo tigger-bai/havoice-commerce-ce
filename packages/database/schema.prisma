@@ -1,0 +1,707 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// Enums (列舉型別)
+// ==========================================
+
+enum Role {
+  USER
+  SUPER_ADMIN
+  ADMIN
+  EDITOR
+  VENDOR
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum OrderSource {
+  WEB_CHECKOUT
+  ADMIN_MANUAL
+  LIVE_MANUAL
+}
+
+// ==========================================
+// User & Auth (使用者與權限系統 - NextAuth.js 整合)
+// ==========================================
+
+// packages/database/prisma/schema.prisma
+
+model User {
+  id            String     @id @default(uuid())
+  email         String     @unique
+  emailVerified DateTime?
+  passwordHash  String?    
+  name          String?
+  image         String?   
+  role          Role       @default(USER)
+  status        UserStatus @default(ACTIVE)
+
+  phone         String?
+  address       String?
+  remark        String?    @db.Text 
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+
+  // NextAuth Relations
+  accounts Account[]
+  sessions Session[]
+
+  // Business Relations
+  articles  Article[]
+  orders    Order[]
+  cartItems CartItem[]
+  products  Product[]  @relation("ProductToVendor") 
+
+  @@index([email])
+}
+
+// NextAuth.js - OAuth 帳號關聯表
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String  // "oauth" | "oidc" | "credentials"
+  provider          String  // "google" | "line" | "github" | "credentials"
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+// NextAuth.js - 資料庫 Session 策略 (可選，本專案使用 JWT 策略)
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// NextAuth.js - Email 驗證 Token
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ==========================================
+// Core Taxonomy (分類與標籤系統 - 內容與商城共用)
+// ==========================================
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?  @db.Text
+  parentId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Self-relation for subcategories
+  parent   Category?  @relation("CategoryToCategory", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  children Category[] @relation("CategoryToCategory")
+
+  // Relations
+  articles Article[]
+  products Product[]
+
+  @@index([slug])
+  @@index([parentId])
+}
+
+model Tag {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations (Many-to-Many via join tables)
+  articles ArticlesOnTags[]
+  products ProductsOnTags[]
+
+  @@index([slug])
+}
+
+// ==========================================
+// Content CMS System (內容管理系統)
+// ==========================================
+
+model Article {
+  id           String        @id @default(uuid())
+  title        String
+  slug         String        @unique
+  content      String        @db.LongText // 支援富文本與長篇內容
+  summary      String?       @db.Text
+  coverImage   String?
+  authorId     String
+  categoryId   String
+  status       PublishStatus @default(DRAFT)
+  viewCount    Int           @default(0)
+  publishedAt  DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+
+  // Relations
+  author   User     @relation(fields: [authorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  tags                ArticlesOnTags[]
+  recommendedProducts ArticleProductRecommendation[]
+
+  @@index([slug])
+  @@index([categoryId])
+  @@index([authorId])
+}
+
+model Video {
+  id          String        @id @default(uuid())
+  title       String
+  slug        String        @unique
+  description String?       @db.Text
+  videoUrl    String
+  coverImage  String?
+  duration    Int?          // 影片長度（秒）
+  status      PublishStatus @default(DRAFT)
+  viewCount   Int           @default(0)
+  publishedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  deletedAt   DateTime?
+
+  @@index([slug])
+}
+
+// Join Table for Article <-> Tag (Many-to-Many)
+model ArticlesOnTags {
+  articleId String
+  tagId     String
+  createdAt DateTime @default(now())
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, tagId])
+  @@index([articleId])
+  @@index([tagId])
+}
+
+// ==========================================
+// E-Commerce System (電子商務系統)
+// ==========================================
+
+model Product {
+  id             String        @id @default(uuid())
+  name           String
+  slug           String        @unique
+  description    String        @db.Text
+  price          Decimal       @db.Decimal(10, 2)
+  compareAtPrice Decimal?      @db.Decimal(10, 2) // 促銷前的原價，用於前端顯示折扣
+  sku            String        @unique
+  stock          Int           @default(0)
+  version        Int           @default(0)
+  coverImage     String
+  images         String?       @db.Text // 以 JSON 陣列字串或逗號分隔儲存多張圖片
+  categoryId     String
+  vendorId       String?       // 多供應商：商品所屬廠商（Nullable，平台自營商品為 null）
+  status         PublishStatus @default(DRAFT)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+
+  // Relations
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  vendor   User?    @relation("ProductToVendor", fields: [vendorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  tags                  ProductsOnTags[]
+  cartItems             CartItem[]
+  orderItems            OrderItem[]
+  inventoryLogs         InventoryLog[]
+  recommendedInArticles ArticleProductRecommendation[]
+
+  @@index([slug])
+  @@index([categoryId])
+  @@index([vendorId])
+}
+
+// Join Table for Product <-> Tag (Many-to-Many)
+model ProductsOnTags {
+  productId String
+  tagId     String
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([productId, tagId])
+  @@index([productId])
+  @@index([tagId])
+}
+
+// ==========================================
+// Shopping Cart (購物車系統)
+// ==========================================
+
+model CartItem {
+  id        String   @id @default(uuid())
+  userId    String
+  productId String
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId]) // 確保同一使用者對同一商品只有一筆購物車紀錄
+  @@index([userId])
+  @@index([productId])
+}
+
+// ==========================================
+// Order System (訂單系統)
+// ==========================================
+
+model Customer {
+  id           String    @id @default(uuid())
+  name         String
+  phone        String?
+  email        String?
+  lineId       String?
+  facebookName String?
+  postalCode   String?
+  city         String?
+  district     String?
+  address      String?   @db.Text
+  remark       String?   @db.Text
+  source       String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  // Relations
+  orders Order[]
+
+  @@index([phone])
+  @@index([email])
+  @@index([name])
+  @@index([postalCode])
+  @@index([deletedAt])
+}
+
+model Order {
+  id              String        @id @default(uuid())
+  orderNumber     String        @unique // 企業級格式：JY-YYYYMMDD-隨機碼/自增
+  userId          String?
+  customerId      String?
+  source          OrderSource   @default(WEB_CHECKOUT)
+  totalAmount     Decimal       @db.Decimal(10, 2)
+  shippingAddress String
+  billingAddress  String?
+  status          OrderStatus   @default(PENDING)
+  paymentStatus   PaymentStatus @default(UNPAID)
+  paymentMethod   String?
+
+  // --- 綠界物流 C2C 專用欄位 ---
+  cvsStoreId             String?  // 儲存超商門市代號
+  cvsSubType             String?  // 儲存物流子類型 (例如 UNIMART)
+  shippingTrackingNumber String?  // 交貨便代碼 / 寄件編號
+  shippingPaymentNo      String?  // 7-11 專用交貨便代碼
+  shippingValidationNo   String?  // 7-11 專用驗證碼
+  
+  shippingMethod  String?
+  trackingNumber  String?
+  notes           String?       @db.Text
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+
+  // Relations
+  user                User?                @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  customer            Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  items               OrderItem[]
+  paymentTransactions PaymentTransaction[]
+  paymentEvents       PaymentEvent[]
+  statusLogs          OrderStatusLog[]
+  inventoryLogs       InventoryLog[]
+  recipient           OrderRecipient?
+  shipments           Shipment[]
+  shipmentEvents      ShipmentEvent[]
+  refunds             Refund[]
+  refundEvents        RefundEvent[]
+
+  @@index([userId])
+  @@index([customerId])
+  @@index([source])
+  @@index([orderNumber])
+}
+
+model OrderRecipient {
+  id         String   @id @default(uuid())
+  orderId    String   @unique
+  name       String
+  phone      String
+  email      String?
+  address    String
+  city       String?
+  district   String?
+  postalCode String?
+  country    String   @default("TW")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([orderId])
+  @@index([email])
+  @@index([phone])
+}
+
+model OrderItem {
+  id           String   @id @default(uuid())
+  orderId      String
+  productId    String
+  productName  String   // 歷史快照：避免商品改名影響歷史訂單
+  productPrice Decimal  @db.Decimal(10, 2) // 歷史快照：避免商品調價影響歷史訂單
+  vendorId     String?  // 多供應商：建立訂單時依商品供應商寫入的快照，供廠商查詢自己的訂單明細
+  quantity     Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product       Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  inventoryLogs InventoryLog[]
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([vendorId])
+}
+
+model PaymentTransaction {
+  id              String    @id @default(uuid())
+  orderId         String
+  merchantTradeNo String    @unique
+  providerTradeNo String?
+  amount          Decimal   @db.Decimal(10, 2)
+  method          String
+  status          String
+  paidAt          DateTime?
+  rawPayload      Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  order  Order          @relation(fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  events PaymentEvent[]
+
+  @@index([orderId])
+  @@index([providerTradeNo])
+  @@index([status])
+}
+
+model PaymentEvent {
+  id                   String   @id @default(uuid())
+  orderId              String?
+  paymentTransactionId String?
+  merchantTradeNo      String?
+  providerTradeNo      String?
+  rtnCode              String?
+  rtnMsg               String?
+  checkMacValue        String?
+  checkMacMatched      Boolean  @default(false)
+  processed            Boolean  @default(false)
+  errorMessage         String?
+  rawPayload           Json
+  createdAt            DateTime @default(now())
+
+  // Relations
+  order              Order?              @relation(fields: [orderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  paymentTransaction PaymentTransaction? @relation(fields: [paymentTransactionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([orderId])
+  @@index([paymentTransactionId])
+  @@index([merchantTradeNo])
+  @@index([providerTradeNo])
+  @@index([processed])
+}
+
+model OrderStatusLog {
+  id         String   @id @default(uuid())
+  orderId    String
+  fromStatus String
+  toStatus   String
+  actorType  String
+  actorId    String?
+  reason     String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  // Relations
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@index([actorType])
+}
+
+model InventoryLog {
+  id             String   @id @default(uuid())
+  productId      String
+  orderId        String?
+  orderItemId    String?
+  type           String
+  quantityChange Int
+  beforeQuantity Int?
+  afterQuantity  Int?
+  actorType      String
+  actorId        String?
+  reason         String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  // Relations
+  product   Product    @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  order     Order?     @relation(fields: [orderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([productId])
+  @@index([orderId])
+  @@index([orderItemId])
+  @@index([type])
+  @@index([actorType])
+  @@index([createdAt])
+}
+
+model AdminAuditLog {
+  id           String   @id @default(uuid())
+  actorId      String?
+  actorEmail   String?
+  actorName    String?
+  action       String
+  resourceType String
+  resourceId   String?
+  description  String?  @db.Text
+  beforeData   Json?
+  afterData    Json?
+  metadata     Json?
+  ipAddress    String?
+  userAgent    String?  @db.Text
+  createdAt    DateTime @default(now())
+
+  @@index([actorId])
+  @@index([action])
+  @@index([resourceType, resourceId])
+  @@index([createdAt])
+  @@map("admin_audit_logs")
+}
+
+model Shipment {
+  id                 String   @id @default(uuid())
+  orderId            String
+  provider           String?
+  shippingMethod     String?
+  status             String
+  trackingNumber     String?
+  providerShipmentNo String?
+  paymentNo          String?
+  validationNo       String?
+  cvsStoreId         String?
+  cvsStoreName       String?
+  cvsAddress         String?
+  cvsSubType         String?
+  recipientName      String?
+  recipientPhone     String?
+  recipientEmail     String?
+  recipientAddress   String?
+  rawResponse        Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Relations
+  order  Order           @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  events ShipmentEvent[]
+
+  @@index([orderId])
+  @@index([provider])
+  @@index([status])
+  @@index([trackingNumber])
+  @@map("shipments")
+}
+
+model ShipmentEvent {
+  id         String   @id @default(uuid())
+  shipmentId String
+  orderId    String
+  eventType  String
+  status     String?
+  message    String?  @db.Text
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  // Relations
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([shipmentId])
+  @@index([orderId])
+  @@index([eventType])
+  @@index([status])
+  @@index([createdAt])
+  @@map("shipment_events")
+}
+
+model Refund {
+  id                   String   @id @default(uuid())
+  orderId              String
+  paymentTransactionId String?
+  provider             String
+  amount               Decimal  @db.Decimal(10, 2)
+  status               String
+  reason               String?  @db.Text
+  requestedByActorType String
+  requestedByActorId   String?
+  providerRefundNo     String?
+  rawResponse          Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  // Relations
+  order  Order         @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  events RefundEvent[]
+
+  @@index([orderId])
+  @@index([paymentTransactionId])
+  @@index([provider])
+  @@index([status])
+  @@index([createdAt])
+  @@map("refunds")
+}
+
+model RefundEvent {
+  id        String   @id @default(uuid())
+  refundId  String?
+  orderId   String
+  eventType String
+  status    String?
+  message   String?  @db.Text
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  // Relations
+  refund Refund? @relation(fields: [refundId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  order  Order   @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([refundId])
+  @@index([orderId])
+  @@index([eventType])
+  @@index([status])
+  @@index([createdAt])
+  @@map("refund_events")
+}
+
+// ==========================================
+// Core Business Feature (導購推薦關聯表)
+// ==========================================
+
+model ArticleProductRecommendation {
+  articleId String
+  productId String
+  sortOrder Int      @default(0) // 排序權重，數字越小越靠前
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, productId])
+  @@index([articleId])
+  @@index([productId])
+}
+
+// ==========================================
+// Marketing Layout CMS (行銷版位與首頁樓層管理)
+// ==========================================
+
+model LayoutSection {
+  id        String       @id @default(uuid())
+  title     String // 樓層標題 (例如：首頁主輪播、保健食品推薦)
+  type      String // 呈現類型 (例如：CAROUSEL, GRID, BANNER)
+  pageRoute String       @default("/shop") // 該區塊所屬頁面路由 (例如：'/', '/shop', '/promo')
+  sortOrder Int          @default(0) // 樓層上下排序
+  isActive  Boolean      @default(true)
+  items     LayoutItem[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([pageRoute, sortOrder])
+  @@index([sortOrder])
+}
+
+model LayoutItem {
+  id        String        @id @default(uuid())
+  sectionId String
+  section   LayoutSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  title     String? // 圖片/項目的輔助標題
+  imageUrl  String // 圖檔網址
+  linkUrl   String? // 點擊後跳轉的網址 (例如：/products/123)
+  sortOrder Int           @default(0) // 輪播或並排的左右排序
+  isActive  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([sectionId])
+  @@index([sortOrder])
+}

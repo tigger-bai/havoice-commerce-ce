@@ -1,0 +1,26 @@
+{
+  "name": "havoice-platform",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "pnpm --filter database db:generate && turbo build",
+    "lint": "turbo lint",
+    "type-check": "turbo type-check",
+    "clean": "turbo clean && rm -rf node_modules",
+    "db:generate": "turbo db:generate --filter=@havoice/database",
+    "db:push": "turbo db:push --filter=@havoice/database",
+    "db:seed": "turbo db:seed --filter=@havoice/database",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "postinstall": "pnpm --filter database db:generate"
+  },
+  "devDependencies": {
+    "turbo": "^1.12.0",
+    "prettier": "^3.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0"
+}

@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+**/node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+.next/
+out/
+build/
+coverage/
+*.tsbuildinfo
+
+# Turborepo
+.turbo/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Secrets and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+*.csr
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs and local artifacts
+*.log
+npm-debug.log*
+pnpm-debug.log*
+*.dump
+*.bak
+*.backup
+backups/
+database-dumps/
+
+# Local database exports / real business data
+packages/database/prisma/data/
+*.db
+*.sqlite
+*.sqlite3
