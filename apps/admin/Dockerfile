@@ -2,6 +2,9 @@
 FROM --platform=linux/amd64 node:20-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
 WORKDIR /app
 
@@ -11,6 +14,7 @@ COPY apps/web/package.json apps/web/package.json
 COPY apps/admin/package.json apps/admin/package.json
 COPY apps/api/package.json apps/api/package.json
 COPY packages/database/package.json packages/database/package.json
+COPY packages/database/schema.prisma packages/database/schema.prisma
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/eslint-config/package.json packages/eslint-config/package.json
 COPY packages/typescript-config/package.json packages/typescript-config/package.json
@@ -28,7 +32,7 @@ RUN mkdir -p apps/admin/public \
  && pnpm --filter @havoice/database db:generate \
  && pnpm --filter @havoice/admin build
 
-FROM --platform=linux/amd64 node:20-bookworm-slim AS runner
+FROM base AS runner
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
