@@ -3,7 +3,8 @@
 import './config/env';
 import { app } from './app';
 
-const PORT = process.env.API_PORT || 4000;
+const PORT = Number(process.env.API_PORT || 4000);
+const HOST = '0.0.0.0';
 
 /**
  * 伺服器啟動入口
@@ -12,9 +13,9 @@ const PORT = process.env.API_PORT || 4000;
  * - 與 app.ts 分離，確保測試時可直接 import app 而無需啟動監聽
  * - 註冊 unhandledRejection 與 uncaughtException 處理器，避免靜默崩潰
  */
-const server = app.listen(PORT, () => {
-  console.log(`🚀 [API] Server is running on http://localhost:${PORT}`);
-  console.log(`📋 [API] Health check: http://localhost:${PORT}/api/health`);
+const server = app.listen(PORT, HOST, () => {
+  console.log(`🚀 [API] Server is running on http://${HOST}:${PORT}`);
+  console.log(`📋 [API] Health check: http://${HOST}:${PORT}/api/health`);
   console.log(`🌍 [API] Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 

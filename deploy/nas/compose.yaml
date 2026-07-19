@@ -1,0 +1,180 @@
+name: havoice-commerce-ce
+
+x-api-tools: &api-tools
+  image: havoice-api-tools:local
+  build:
+    context: ../..
+    dockerfile: apps/api/Dockerfile
+    target: tools
+  platform: linux/amd64
+  environment:
+    NODE_ENV: production
+    DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in deploy/nas/.env}
+  networks:
+    - backend
+
+services:
+  mysql:
+    image: mysql:8.0.42
+    platform: linux/amd64
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?Set MYSQL_DATABASE in deploy/nas/.env}
+      MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER in deploy/nas/.env}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in deploy/nas/.env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in deploy/nas/.env}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - backend
+
+  migrate:
+    <<: *api-tools
+    command: ["pnpm", "--filter", "@havoice/database", "exec", "prisma", "migrate", "deploy", "--schema", "schema.prisma"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+
+  seed:
+    <<: *api-tools
+    command: ["pnpm", "--filter", "@havoice/database", "db:seed"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in deploy/nas/.env}
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:?Set DEMO_USER_PASSWORD in deploy/nas/.env}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    profiles: ["manual"]
+    restart: "no"
+
+  api:
+    image: havoice-api:local
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+      target: runner
+    platform: linux/amd64
+    environment:
+      NODE_ENV: production
+      API_PORT: 4000
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in deploy/nas/.env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in deploy/nas/.env}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?Set NEXTAUTH_SECRET in deploy/nas/.env}
+      CORS_ORIGIN: ${CORS_ORIGIN:?Set CORS_ORIGIN in deploy/nas/.env}
+      WEB_BASE_URL: ${WEB_NEXTAUTH_URL:?Set WEB_NEXTAUTH_URL in deploy/nas/.env}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      ECPAY_HASH_KEY: ${ECPAY_HASH_KEY:-}
+      ECPAY_HASH_IV: ${ECPAY_HASH_IV:-}
+      ECPAY_ACTION_URL: ${ECPAY_ACTION_URL:-}
+      ECPAY_LOGISTICS_HASH_KEY: ${ECPAY_LOGISTICS_HASH_KEY:-}
+      ECPAY_LOGISTICS_HASH_IV: ${ECPAY_LOGISTICS_HASH_IV:-}
+      ECPAY_MAP_URL: ${ECPAY_MAP_URL:-}
+      API_BASE_URL: ${PUBLIC_API_URL:?Set PUBLIC_API_URL in deploy/nas/.env}
+    ports:
+      - "3400:4000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - backend
+      - frontend
+
+  web:
+    image: havoice-web:local
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+      target: runner
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:?Set PUBLIC_API_URL in deploy/nas/.env}
+        NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_URL:?Set PUBLIC_API_URL in deploy/nas/.env}
+        NEXT_PUBLIC_ADMIN_URL: ${ADMIN_NEXTAUTH_URL:?Set ADMIN_NEXTAUTH_URL in deploy/nas/.env}
+        NEXT_PUBLIC_SUPPORT_EMAIL: ${NEXT_PUBLIC_SUPPORT_EMAIL:-contact@example.com}
+        NEXT_PUBLIC_ECPAY_AIO_CHECKOUT_URL: ${NEXT_PUBLIC_ECPAY_AIO_CHECKOUT_URL:-}
+    platform: linux/amd64
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      INTERNAL_API_URL: http://api:4000
+      NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:?Set PUBLIC_API_URL in deploy/nas/.env}
+      NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_URL:?Set PUBLIC_API_URL in deploy/nas/.env}
+      NEXT_PUBLIC_ADMIN_URL: ${ADMIN_NEXTAUTH_URL:?Set ADMIN_NEXTAUTH_URL in deploy/nas/.env}
+      NEXT_PUBLIC_ECPAY_AIO_CHECKOUT_URL: ${NEXT_PUBLIC_ECPAY_AIO_CHECKOUT_URL:-}
+      NEXTAUTH_URL: ${WEB_NEXTAUTH_URL:?Set WEB_NEXTAUTH_URL in deploy/nas/.env}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?Set NEXTAUTH_SECRET in deploy/nas/.env}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in deploy/nas/.env}
+    ports:
+      - "3100:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - frontend
+
+  admin:
+    image: havoice-admin:local
+    build:
+      context: ../..
+      dockerfile: apps/admin/Dockerfile
+      target: runner
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:?Set PUBLIC_API_URL in deploy/nas/.env}
+        NEXT_PUBLIC_WEB_URL: ${WEB_NEXTAUTH_URL:?Set WEB_NEXTAUTH_URL in deploy/nas/.env}
+    platform: linux/amd64
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      INTERNAL_API_URL: http://api:4000
+      NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:?Set PUBLIC_API_URL in deploy/nas/.env}
+      NEXT_PUBLIC_WEB_URL: ${WEB_NEXTAUTH_URL:?Set WEB_NEXTAUTH_URL in deploy/nas/.env}
+      NEXTAUTH_URL: ${ADMIN_NEXTAUTH_URL:?Set ADMIN_NEXTAUTH_URL in deploy/nas/.env}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?Set NEXTAUTH_SECRET in deploy/nas/.env}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in deploy/nas/.env}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    ports:
+      - "3101:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - frontend
+
+volumes:
+  mysql_data:
+
+networks:
+  frontend:
+  backend:

@@ -11,6 +11,7 @@
   "dependencies": {
     "@havoice/database": "workspace:*",
     "@havoice/shared": "workspace:*",
+    "@prisma/client": "^5.22.0",
     "bcryptjs": "2.4.3",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
@@ -31,6 +32,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.9",
     "@types/nodemailer": "^8.0.1",
+    "esbuild": "^0.28.1",
     "tsx": "^4.7.0",
     "typescript": "^5.3.0"
   }

@@ -12,7 +12,11 @@ import type { ApiSuccessResponse, ApiErrorResponse } from '@havoice/shared';
 const DEV_API_BASE_URL = 'http://localhost:4000';
 
 function getApiBaseUrl(): string {
-  const value = process.env.NEXT_PUBLIC_API_URL?.trim();
+  const value = (
+    typeof window === 'undefined'
+      ? process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL
+      : process.env.NEXT_PUBLIC_API_URL
+  )?.trim();
 
   if (value) {
     return value.replace(/\/+$/, '');
@@ -22,7 +26,7 @@ function getApiBaseUrl(): string {
     return DEV_API_BASE_URL;
   }
 
-  throw new Error('Missing required environment variable: NEXT_PUBLIC_API_URL');
+  throw new Error('Missing required API URL environment variable');
 }
 
 const API_BASE_URL = getApiBaseUrl();

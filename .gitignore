@@ -19,6 +19,7 @@ coverage/
 .env.*
 !.env.example
 !**/.env.example
+deploy/nas/.env
 
 # Secrets and certificates
 *.pem
