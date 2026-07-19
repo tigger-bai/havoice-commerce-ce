@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Shop hero banner 01">
+  <rect width="640" height="360" rx="28" fill="#F5FBF7"/>
+  <rect x="72" y="84" width="496" height="192" rx="28" fill="#FFF" stroke="#DAEEDB" stroke-width="6"/>
+  <path d="M184 226c24-64 92-96 132-96s98 32 122 96" fill="none" stroke="#7FAE84" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="218" cy="156" r="52" fill="#A9D3AF"/>
+</svg>

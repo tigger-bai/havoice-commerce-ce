@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Demo outdoor product illustration 02">
+  <rect width="400" height="400" rx="32" fill="#F7FAF4"/>
+  <rect x="92" y="132" width="216" height="156" rx="28" fill="#FFF" stroke="#DDE8CD" stroke-width="6"/>
+  <path d="M146 268c22-58 86-58 108 0" fill="none" stroke="#8DAD63" stroke-width="16" stroke-linecap="round"/>
+  <path d="M160 164c16-30 64-30 80 0" fill="none" stroke="#C7DA95" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="200" cy="100" r="24" fill="#B6C970"/>
+</svg>

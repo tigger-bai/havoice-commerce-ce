@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import type { LayoutItem } from '@/types';
 
 /**
  * 區塊共用元件
@@ -74,9 +73,4 @@ export function SectionHeading({
       {subtitle && <p className="hidden text-sm text-gray-400 sm:block">{subtitle}</p>}
     </div>
   );
-}
-
-/** 取得項目顯示用的 alt 文字 */
-export function itemAlt(item: LayoutItem, fallback: string): string {
-  return item.title || fallback;
 }

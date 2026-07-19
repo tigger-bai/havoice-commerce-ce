@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Category outdoor layout image">
+  <rect width="640" height="360" rx="28" fill="#F7FBF6"/>
+  <rect x="96" y="92" width="448" height="176" rx="28" fill="#FFF" stroke="#DCEBD9" stroke-width="6"/>
+  <path d="M190 238 320 128l130 110" fill="none" stroke="#7BA96A" stroke-width="20" stroke-linecap="round"/>
+  <circle cx="320" cy="128" r="34" fill="#9CCB84"/>
+  <rect x="330" y="164" width="102" height="16" rx="8" fill="#5E8156"/>
+</svg>

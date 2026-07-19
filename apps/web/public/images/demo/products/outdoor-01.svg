@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Demo outdoor product illustration 01">
+  <rect width="400" height="400" rx="32" fill="#F4FBF7"/>
+  <path d="M108 282 200 118l92 164z" fill="#D4EBD8" stroke="#89B58E" stroke-width="6"/>
+  <path d="M138 282h124" stroke="#4F7C58" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="200" cy="168" r="24" fill="#70A976"/>
+</svg>

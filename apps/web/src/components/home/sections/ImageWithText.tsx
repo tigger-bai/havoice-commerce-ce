@@ -1,6 +1,7 @@
 import type { LayoutItem } from '@/types';
-import { SafeImage, MaybeLink, itemAlt } from './shared';
+import { SafeImage, MaybeLink } from './shared';
 
+import { itemAlt } from './item-utils';
 /**
  * IMAGE_WITH_TEXT — 圖文精選
  *

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Demo home product illustration 01">
+  <rect width="400" height="400" rx="32" fill="#F4F7FB"/>
+  <rect x="82" y="104" width="236" height="192" rx="24" fill="#FFFFFF" stroke="#D7E3F1" stroke-width="6"/>
+  <rect x="116" y="144" width="168" height="110" rx="18" fill="#D8E7F7"/>
+  <rect x="132" y="160" width="136" height="28" rx="8" fill="#7F97C3"/>
+  <rect x="132" y="198" width="104" height="16" rx="8" fill="#A7C2E2"/>
+  <circle cx="288" cy="92" r="32" fill="#7AA7C2"/>
+</svg>

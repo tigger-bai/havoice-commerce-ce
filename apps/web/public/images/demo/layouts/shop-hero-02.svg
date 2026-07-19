@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Shop hero banner 02">
+  <rect width="640" height="360" rx="28" fill="#FFF8F3"/>
+  <rect x="68" y="84" width="504" height="192" rx="28" fill="#FFF" stroke="#F0DDC2" stroke-width="6"/>
+  <rect x="122" y="124" width="174" height="132" rx="24" fill="#F0C48D"/>
+  <rect x="342" y="124" width="176" height="22" rx="11" fill="#B7693C"/>
+  <rect x="342" y="164" width="126" height="18" rx="9" fill="#E8B178"/>
+  <rect x="342" y="198" width="96" height="18" rx="9" fill="#F7E3CB"/>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Balanced diet article cover">
+  <rect width="640" height="360" rx="28" fill="#FFF8F5"/>
+  <rect x="108" y="94" width="424" height="172" rx="30" fill="#FFF" stroke="#F0D8CC" stroke-width="6"/>
+  <circle cx="220" cy="180" r="66" fill="#F5C3A5"/>
+  <circle cx="336" cy="180" r="54" fill="#E88D62"/>
+  <rect x="230" y="132" width="112" height="18" rx="9" fill="#C96C44"/>
+  <rect x="230" y="164" width="86" height="16" rx="8" fill="#E5A07E"/>
+</svg>

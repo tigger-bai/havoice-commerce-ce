@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Home hero banner 02">
+  <rect width="640" height="360" rx="28" fill="#F8F5FB"/>
+  <rect x="68" y="82" width="504" height="196" rx="30" fill="#FFF" stroke="#E4D8F1" stroke-width="6"/>
+  <circle cx="230" cy="180" r="82" fill="#D8C6F0"/>
+  <rect x="338" y="132" width="168" height="22" rx="11" fill="#7C62B4"/>
+  <rect x="338" y="170" width="126" height="18" rx="9" fill="#B99FE0"/>
+  <rect x="338" y="202" width="102" height="18" rx="9" fill="#E6DCFA"/>
+</svg>

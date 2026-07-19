@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Hydration article cover">
+  <rect width="640" height="360" rx="28" fill="#F5FCF8"/>
+  <rect x="104" y="94" width="432" height="172" rx="28" fill="#FFF" stroke="#DAEEDB" stroke-width="6"/>
+  <path d="M236 126c-44 0-72 24-72 64 0 42 28 72 72 72h52c38 0 66-30 66-72 0-44-28-64-66-64z" fill="#A3D3B5"/>
+  <path d="M218 148h88" stroke="#5C8C67" stroke-width="12" stroke-linecap="round"/>
+  <path d="M226 186h72" stroke="#7BAA83" stroke-width="12" stroke-linecap="round"/>
+</svg>

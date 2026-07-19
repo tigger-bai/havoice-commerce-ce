@@ -1,10 +1,12 @@
 'use client';
 
+import { itemAlt } from './item-utils';
+
 import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { LayoutItem } from '@/types';
-import { MaybeLink, SafeImage, itemAlt } from './shared';
+import { MaybeLink, SafeImage } from './shared';
 
 interface HeroBannerSectionProps {
   items: LayoutItem[];

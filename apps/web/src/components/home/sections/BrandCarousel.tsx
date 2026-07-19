@@ -1,9 +1,11 @@
 'use client';
 
+import { itemAlt } from './item-utils';
+
 import { useRef } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { LayoutItem } from '@/types';
-import { MaybeLink, SafeImage, itemAlt } from './shared';
+import { MaybeLink, SafeImage } from './shared';
 
 interface BrandCarouselProps {
   title: string;

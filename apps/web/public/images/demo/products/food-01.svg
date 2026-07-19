@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Demo food product illustration 01">
+  <rect width="400" height="400" rx="32" fill="#F5FBF2"/>
+  <circle cx="200" cy="198" r="108" fill="#FFF" stroke="#D4E8C6" stroke-width="6"/>
+  <path d="M140 168c28-34 92-34 120 0 8 10 18 24 18 42 0 44-28 74-69 74s-69-30-69-74c0-18 10-32 18-42Z" fill="#B7D98F"/>
+  <rect x="144" y="118" width="112" height="26" rx="13" fill="#8FB96B"/>
+  <rect x="158" y="84" width="84" height="20" rx="10" fill="#6B8E4C"/>
+</svg>

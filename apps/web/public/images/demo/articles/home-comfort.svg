@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Home comfort article cover">
+  <rect width="640" height="360" rx="28" fill="#F7F3FC"/>
+  <rect x="98" y="92" width="444" height="176" rx="30" fill="#FFF" stroke="#E4D8F1" stroke-width="6"/>
+  <rect x="174" y="144" width="292" height="88" rx="20" fill="#D6C6EE"/>
+  <rect x="208" y="122" width="224" height="20" rx="10" fill="#8D75B9"/>
+  <rect x="208" y="250" width="112" height="16" rx="8" fill="#A390C5"/>
+</svg>

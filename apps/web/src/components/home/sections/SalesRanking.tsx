@@ -1,8 +1,10 @@
 'use client';
 
+import { itemAlt } from './item-utils';
+
 import { cn } from '@/lib/utils';
 import type { LayoutItem } from '@/types';
-import { MaybeLink, SafeImage, itemAlt } from './shared';
+import { MaybeLink, SafeImage } from './shared';
 
 interface SalesRankingProps {
   title: string;

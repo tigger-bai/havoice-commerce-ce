@@ -1,6 +1,7 @@
 import type { LayoutItem } from '@/types';
-import { SafeImage, MaybeLink, SectionHeading, itemAlt } from './shared';
+import { SafeImage, MaybeLink, SectionHeading } from './shared';
 
+import { itemAlt } from './item-utils';
 /**
  * ICON_NAVIGATION — 圖文導覽列
  *

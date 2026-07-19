@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Category home layout image">
+  <rect width="640" height="360" rx="28" fill="#F8FAF9"/>
+  <rect x="96" y="92" width="448" height="176" rx="28" fill="#FFF" stroke="#D2E8DD" stroke-width="6"/>
+  <rect x="152" y="140" width="112" height="82" rx="18" fill="#A4D2BE"/>
+  <rect x="294" y="140" width="182" height="20" rx="10" fill="#4F8D74"/>
+  <rect x="294" y="174" width="138" height="16" rx="8" fill="#8FBFA8"/>
+</svg>

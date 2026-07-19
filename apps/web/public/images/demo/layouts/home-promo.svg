@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Home promo banner">
+  <rect width="640" height="360" rx="28" fill="#F5F7FB"/>
+  <rect x="72" y="82" width="496" height="196" rx="30" fill="#FFF" stroke="#D7E3F1" stroke-width="6"/>
+  <rect x="120" y="116" width="160" height="120" rx="24" fill="#A7C2E2"/>
+  <rect x="322" y="122" width="172" height="20" rx="10" fill="#5E7BA7"/>
+  <rect x="322" y="156" width="132" height="16" rx="8" fill="#8FAED3"/>
+  <rect x="322" y="186" width="88" height="16" rx="8" fill="#D6E6F9"/>
+</svg>

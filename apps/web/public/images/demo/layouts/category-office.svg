@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Category office layout image">
+  <rect width="640" height="360" rx="28" fill="#F7F9FE"/>
+  <rect x="96" y="92" width="448" height="176" rx="28" fill="#FFF" stroke="#DDE6F5" stroke-width="6"/>
+  <rect x="152" y="136" width="160" height="92" rx="20" fill="#AFC3E8"/>
+  <rect x="346" y="138" width="132" height="20" rx="10" fill="#5A79B3"/>
+  <rect x="346" y="174" width="104" height="16" rx="8" fill="#8EA9D3"/>
+</svg>
