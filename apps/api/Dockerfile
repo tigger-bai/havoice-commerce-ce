@@ -27,7 +27,12 @@ RUN pnpm --filter @havoice/database db:generate \
  && pnpm --filter @havoice/database build \
  && pnpm --filter @havoice/api build \
  && pnpm --filter @havoice/api exec esbuild src/server.ts --bundle --platform=node --target=node20 --format=esm --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" --outfile=dist/server.bundle.mjs --external:@prisma/client --external:.prisma/client \
- && pnpm --filter @havoice/api deploy --prod /prod/api
+ && pnpm --filter @havoice/api deploy --prod /prod/api \
+ && cp packages/database/schema.prisma /prod/api/schema.prisma \
+ && cd /prod/api \
+ && /app/packages/database/node_modules/.bin/prisma generate --schema schema.prisma \
+ && node -e 'const resolved = require.resolve("@prisma/client"); const { PrismaClient } = require("@prisma/client"); const client = new PrismaClient(); console.log(`Prisma runtime client: ${resolved}`); client.$disconnect();' \
+ && find node_modules -path '*/.prisma/client/libquery_engine-*' -type f -print -quit | grep -q .
 
 # One-shot Prisma jobs intentionally retain build tooling and source files.
 FROM builder AS tools
@@ -41,6 +46,9 @@ RUN groupadd --system --gid 1001 nodejs \
  && useradd --system --uid 1001 --gid nodejs api
 COPY --from=builder --chown=api:nodejs /prod/api/node_modules ./node_modules
 COPY --from=builder --chown=api:nodejs /app/apps/api/dist/server.bundle.mjs ./server.mjs
+RUN node -e 'const resolved = require.resolve("@prisma/client"); const { PrismaClient } = require("@prisma/client"); const client = new PrismaClient(); console.log(`Runner Prisma client: ${resolved}`); client.$disconnect();' \
+ && find node_modules -path '*/.prisma/client/libquery_engine-*' -type f -print -quit | grep -q . \
+ && openssl version
 USER api
 EXPOSE 4000
 CMD ["node", "server.mjs"]
