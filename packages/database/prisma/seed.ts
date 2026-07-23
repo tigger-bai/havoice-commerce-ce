@@ -282,7 +282,11 @@ function createDeterministicUuid(seed: string): string {
 }
 
 const demoUsers = [
-  { email: 'demo.admin@example.com', name: 'Demo 管理員', role: Role.ADMIN },
+  {
+    email: 'demo.admin@example.com',
+    name: 'Demo 最高權限管理員',
+    role: Role.SUPER_ADMIN,
+  },
   { email: 'demo.vendor01@example.com', name: 'Demo 供應商 01', role: Role.VENDOR },
   { email: 'demo.vendor02@example.com', name: 'Demo 供應商 02', role: Role.VENDOR },
   { email: 'demo.member01@example.com', name: 'Demo 會員 01', role: Role.USER },
@@ -340,6 +344,7 @@ async function main() {
   const savedDemoProducts: Array<{
     id: string;
     name: string;
+    slug: string;
     price: number;
     vendorId: string | null;
   }> = [];

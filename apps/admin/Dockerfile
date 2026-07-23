@@ -30,7 +30,11 @@ ENV DATABASE_URL=mysql://build:build@127.0.0.1:3306/build
 COPY . .
 RUN mkdir -p apps/admin/public \
  && pnpm --filter @havoice/database db:generate \
- && pnpm --filter @havoice/admin build
+ && pnpm --filter @havoice/admin build \
+ && query_engine="$(find /app/node_modules -type f -name 'libquery_engine-debian-openssl-3.0.x.so.node' -print -quit)" \
+ && test -n "$query_engine" \
+ && mkdir -p /app/apps/admin/.next/standalone/apps/admin/.prisma/client \
+ && cp "$query_engine" /app/apps/admin/.next/standalone/apps/admin/.prisma/client/
 
 FROM base AS runner
 ENV NODE_ENV=production
