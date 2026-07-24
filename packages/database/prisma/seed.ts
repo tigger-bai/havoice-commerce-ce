@@ -283,9 +283,14 @@ function createDeterministicUuid(seed: string): string {
 
 const demoUsers = [
   {
-    email: 'demo.admin@example.com',
-    name: 'Demo 最高權限管理員',
+    email: 'demo.superadmin@example.com',
+    name: 'Demo 超級管理員',
     role: Role.SUPER_ADMIN,
+  },
+  {
+    email: 'demo.admin@example.com',
+    name: 'Demo 一般管理員',
+    role: Role.ADMIN,
   },
   { email: 'demo.vendor01@example.com', name: 'Demo 供應商 01', role: Role.VENDOR },
   { email: 'demo.vendor02@example.com', name: 'Demo 供應商 02', role: Role.VENDOR },
