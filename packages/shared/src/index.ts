@@ -6,7 +6,7 @@ export {
   PaginationQuerySchema,
   type PaginationQueryDTO,
   type PaginatedResponse,
-} from './schemas/pagination.schema';
+} from "./schemas/pagination.schema";
 
 export {
   PublishStatusEnum,
@@ -17,7 +17,7 @@ export {
   type UpdateArticleDTO,
   ArticleQuerySchema,
   type ArticleQueryDTO,
-} from './schemas/article.schema';
+} from "./schemas/article.schema";
 
 export {
   CreateProductSchema,
@@ -26,14 +26,24 @@ export {
   type UpdateProductDTO,
   ProductQuerySchema,
   type ProductQueryDTO,
-} from './schemas/product.schema';
+  ProductImageInputSchema,
+  type ProductImageInputDTO,
+  ProductImageResponseSchema,
+  type ProductImageResponseDTO,
+  ProductDetailBlockTypeEnum,
+  type ProductDetailBlockType,
+  ProductDetailBlockInputSchema,
+  type ProductDetailBlockInputDTO,
+  ProductDetailBlockResponseSchema,
+  type ProductDetailBlockResponseDTO,
+} from "./schemas/product.schema";
 
 export {
   RecommendationItemSchema,
   type RecommendationItemDTO,
   SetRecommendationsSchema,
   type SetRecommendationsDTO,
-} from './schemas/recommendation.schema';
+} from "./schemas/recommendation.schema";
 
 export {
   RegisterSchema,
@@ -42,7 +52,7 @@ export {
   type LoginDTO,
   type AuthTokenPayload,
   type AuthResponse,
-} from './schemas/auth.schema';
+} from "./schemas/auth.schema";
 
 export {
   ECOMMERCE_SECTION_TYPES,
@@ -68,7 +78,7 @@ export {
   type ReorderLayoutSectionsDTO,
   type CreateLayoutSectionInput,
   type CreateLayoutItemInput,
-} from './schemas/layout.schema';
+} from "./schemas/layout.schema";
 
 export {
   OrderItemInputSchema,
@@ -81,7 +91,7 @@ export {
   type CreateOrderDTO,
   OrderQuerySchema,
   type OrderQueryDTO,
-} from './schemas/order.schema';
+} from "./schemas/order.schema";
 
 // ==========================================
 // Types (共用型別介面)
@@ -91,7 +101,7 @@ export type {
   ApiErrorResponse,
   ApiResponse,
   ValidationErrorDetail,
-} from './types/api-response.types';
+} from "./types/api-response.types";
 
 // ==========================================
 // Email 模板（共用，純函式；不含寄送邏輯與 Node 依賴）
@@ -103,7 +113,7 @@ export {
   type OrderEmailItem,
   type OrderEmailData,
   type RenderedEmail,
-} from './email/templates';
+} from "./email/templates";
 
 // ==========================================
 // 綠界 ECPay 結帳工具（共用純函式；CheckMacValue 簽章與 payload 組裝）
@@ -115,7 +125,7 @@ export {
   parseOriginalOrderNumber,
   type EcpayItem,
   type BuildEcpayPayloadParams,
-} from './ecpay/checkout';
+} from "./ecpay/checkout";
 
 // ==========================================
 // 綠界物流工具（物流 API 使用 MD5 CheckMacValue，不能沿用金流 SHA256）
@@ -129,7 +139,7 @@ export {
   verifyLogisticsCheckMacValue,
   type LogisticsV2EncryptPayload,
   type LogisticsCheckMacSelfTestResult,
-} from './ecpay/logistics';
+} from "./ecpay/logistics";
 
 // ==========================================
 // 台灣地址工具
@@ -138,7 +148,7 @@ export {
   TAIWAN_POSTAL_CODES,
   resolveTaiwanPostalCode,
   resolveTaiwanPostalCodeFromAddress,
-} from './taiwan/postal-codes';
+} from "./taiwan/postal-codes";
 
 export {
   TAIWAN_ADDRESS_POSTAL_CODES,
@@ -149,4 +159,4 @@ export {
   parseTaiwanAddress,
   type ParsedTaiwanAddress,
   type TaiwanDistrictOption,
-} from './taiwan-address';
+} from "./taiwan-address";
