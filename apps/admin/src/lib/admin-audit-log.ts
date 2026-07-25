@@ -15,7 +15,9 @@ export type AdminAuditAction =
   | 'ORDER_POST_OFFICE_TRACKING_SYNC'
   | 'ORDER_ECPAY_POST_OFFICE_LOGISTICS_CREATE'
   | 'ORDER_LIVE_MANUAL_CREATE'
-  | 'ORDER_PAYMENT_CONFIRMATION_CREATE';
+  | 'ORDER_PAYMENT_CONFIRMATION_CREATE'
+  | 'PRODUCT_CREATE'
+  | 'PRODUCT_UPDATE';
 
 type AdminAuditClient = {
   adminAuditLog: {
@@ -28,7 +30,7 @@ type CreateAdminAuditLogInput = {
   req: NextRequest;
   actor?: AdminSessionUser | null;
   action: AdminAuditAction;
-  resourceType: 'ORDER';
+  resourceType: 'ORDER' | 'PRODUCT';
   resourceId?: string | null;
   description?: string | null;
   beforeData?: Prisma.InputJsonObject;

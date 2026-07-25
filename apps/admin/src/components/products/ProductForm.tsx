@@ -1,16 +1,23 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
-import { useForm, Controller, type Resolver } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { useForm, Controller, type Resolver } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 
-import { CreateProductSchema } from '@havoice/shared';
+import { CreateProductSchema } from "@havoice/shared";
 
-import { useToast } from '@/components/ui/Toast';
-import { ErrorAlert } from '@/components/ui/LoadingAndError';
-import { ImageUpload } from '@/components/ui/ImageUpload';
+import { useToast } from "@/components/ui/Toast";
+import { ErrorAlert } from "@/components/ui/LoadingAndError";
+import { ProductImagesEditor } from "./ProductImagesEditor";
+import { ProductDetailBlocksEditor } from "./ProductDetailBlocksEditor";
+import {
+  normalizeBlockOrder,
+  normalizeImageOrder,
+  type ProductDetailBlockFormValue,
+  type ProductImageFormValue,
+} from "./product-editor-types";
 
 /**
  * 共用商品表單（新增 / 編輯複用）
@@ -31,11 +38,16 @@ type ProductFormValues = {
   description: string;
   price: number;
   compareAtPrice?: number | null;
+  cost?: number | null;
   sku: string;
+  barcode?: string | null;
   stock: number;
+  safetyStock: number;
+  reorderPoint?: number | null;
+  brand?: string | null;
   coverImage: string;
   categoryId: string;
-  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   vendorId?: string | null;
 };
 
@@ -52,49 +64,79 @@ interface VendorOption {
 
 export interface ProductFormInitialData extends Partial<ProductFormValues> {
   id?: string;
+  productImages?: ProductImageFormValue[];
+  detailBlocks?: ProductDetailBlockFormValue[];
 }
 
 interface ProductFormProps {
-  mode: 'create' | 'edit';
+  mode: "create" | "edit";
   productId?: string;
   initialData?: ProductFormInitialData;
 }
 
-const STATUS_OPTIONS: { value: ProductFormValues['status']; label: string }[] = [
-  { value: 'DRAFT', label: '草稿 (DRAFT)' },
-  { value: 'PUBLISHED', label: '已上架 (PUBLISHED)' },
-  { value: 'ARCHIVED', label: '已下架 (ARCHIVED)' },
-];
+const STATUS_OPTIONS: { value: ProductFormValues["status"]; label: string }[] =
+  [
+    { value: "DRAFT", label: "草稿 (DRAFT)" },
+    { value: "PUBLISHED", label: "已上架 (PUBLISHED)" },
+    { value: "ARCHIVED", label: "已下架 (ARCHIVED)" },
+  ];
 
 /** 由名稱生成 slug：轉小寫、空白與非法字元轉連字號 */
 function slugify(input: string): string {
   return input
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .replace(/[\u4e00-\u9fa5]/g, ''); // 中文無法直接成為合法 slug，移除以避免 regex 驗證失敗
+    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/[\u4e00-\u9fa5]/g, ""); // 中文無法直接成為合法 slug，移除以避免 regex 驗證失敗
 }
 
 const inputClass =
-  'block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-gray-50 disabled:text-gray-400';
-const labelClass = 'block text-sm font-medium text-gray-700';
-const errorClass = 'mt-1 text-xs text-rose-600';
+  "block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-gray-50 disabled:text-gray-400";
+const labelClass = "block text-sm font-medium text-gray-700";
+const errorClass = "mt-1 text-xs text-rose-600";
 
-export function ProductForm({ mode, productId, initialData }: ProductFormProps) {
+export function ProductForm({
+  mode,
+  productId,
+  initialData,
+}: ProductFormProps) {
   const router = useRouter();
   const { toast } = useToast();
 
   const { data: session } = useSession();
   // 多供應商：僅 SUPER_ADMIN / ADMIN 可指派 vendorId；VENDOR 徹底隱藏此欄
-  const canAssignVendor = session?.user?.role === 'SUPER_ADMIN' || session?.user?.role === 'ADMIN';
+  const canAssignVendor =
+    session?.user?.role === "SUPER_ADMIN" || session?.user?.role === "ADMIN";
+  const canManagePlanning = canAssignVendor;
 
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [vendors, setVendors] = useState<VendorOption[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [slugTouched, setSlugTouched] = useState(mode === 'edit');
+  const [slugTouched, setSlugTouched] = useState(mode === "edit");
   // 圖片上傳中：用於停用提交按鈕，防止尚未上傳完成即送出
   const [isUploading, setIsUploading] = useState(false);
+  const [productImages, setProductImages] = useState<ProductImageFormValue[]>(
+    () =>
+      normalizeImageOrder(
+        initialData?.productImages?.length
+          ? initialData.productImages
+          : initialData?.coverImage
+            ? [
+                {
+                  imageUrl: initialData.coverImage,
+                  publicId: null,
+                  altText: "",
+                  sortOrder: 0,
+                  isCover: true,
+                },
+              ]
+            : [],
+      ),
+  );
+  const [detailBlocks, setDetailBlocks] = useState<
+    ProductDetailBlockFormValue[]
+  >(() => normalizeBlockOrder(initialData?.detailBlocks ?? []));
 
   const {
     register,
@@ -104,35 +146,52 @@ export function ProductForm({ mode, productId, initialData }: ProductFormProps) 
     setValue,
     formState: { errors, isSubmitting },
   } = useForm<ProductFormValues>({
-    resolver: zodResolver(CreateProductSchema) as unknown as Resolver<ProductFormValues>,
+    resolver: zodResolver(
+      CreateProductSchema,
+    ) as unknown as Resolver<ProductFormValues>,
     defaultValues: {
-      name: initialData?.name ?? '',
-      slug: initialData?.slug ?? '',
-      description: initialData?.description ?? '',
+      name: initialData?.name ?? "",
+      slug: initialData?.slug ?? "",
+      description: initialData?.description ?? "",
       price: initialData?.price ?? 0,
       compareAtPrice: initialData?.compareAtPrice ?? null,
-      sku: initialData?.sku ?? '',
+      cost: initialData?.cost ?? null,
+      sku: initialData?.sku ?? "",
+      barcode: initialData?.barcode ?? "",
       stock: initialData?.stock ?? 0,
-      coverImage: initialData?.coverImage ?? '',
-      categoryId: initialData?.categoryId ?? '',
-      status: initialData?.status ?? 'DRAFT',
+      safetyStock: initialData?.safetyStock ?? 0,
+      reorderPoint: initialData?.reorderPoint ?? null,
+      brand: initialData?.brand ?? "",
+      coverImage: initialData?.coverImage ?? "",
+      categoryId: initialData?.categoryId ?? "",
+      status: initialData?.status ?? "DRAFT",
       vendorId: initialData?.vendorId ?? null,
     },
   });
 
-  const nameValue = watch('name');
+  const nameValue = watch("name");
+
+  useEffect(() => {
+    const cover =
+      productImages.find((image) => image.isCover)?.imageUrl ??
+      productImages[0]?.imageUrl ??
+      "";
+    setValue("coverImage", cover, { shouldValidate: true });
+  }, [productImages, setValue]);
 
   // 載入分類清單
   useEffect(() => {
     let active = true;
     (async () => {
       try {
-        const res = await fetch('/api/categories', { cache: 'no-store' });
+        const res = await fetch("/api/categories", { cache: "no-store" });
         const json = await res.json();
-        if (!res.ok || !json.success) throw new Error(json?.error?.message || '載入分類失敗');
-        if (active) setCategories(Array.isArray(json.data?.items) ? json.data.items : []);
+        if (!res.ok || !json.success)
+          throw new Error(json?.error?.message || "載入分類失敗");
+        if (active)
+          setCategories(Array.isArray(json.data?.items) ? json.data.items : []);
       } catch {
-        if (active) toast.error('無法載入分類清單，請重新整理頁面');
+        if (active) toast.error("無法載入分類清單，請重新整理頁面");
       }
     })();
     return () => {
@@ -146,12 +205,14 @@ export function ProductForm({ mode, productId, initialData }: ProductFormProps) 
     let active = true;
     (async () => {
       try {
-        const res = await fetch('/api/vendors', { cache: 'no-store' });
+        const res = await fetch("/api/vendors", { cache: "no-store" });
         const json = await res.json();
-        if (!res.ok || !json.success) throw new Error(json?.error?.message || '載入供應商失敗');
-        if (active) setVendors(Array.isArray(json.data?.items) ? json.data.items : []);
+        if (!res.ok || !json.success)
+          throw new Error(json?.error?.message || "載入供應商失敗");
+        if (active)
+          setVendors(Array.isArray(json.data?.items) ? json.data.items : []);
       } catch {
-        if (active) toast.error('無法載入供應商清單，請重新整理頁面');
+        if (active) toast.error("無法載入供應商清單，請重新整理頁面");
       }
     })();
     return () => {
@@ -161,8 +222,8 @@ export function ProductForm({ mode, productId, initialData }: ProductFormProps) 
 
   // 新增模式：名稱變動時自動生成 slug（使用者尚未手動修改 slug）
   useEffect(() => {
-    if (mode === 'create' && !slugTouched && nameValue) {
-      setValue('slug', slugify(nameValue), { shouldValidate: false });
+    if (mode === "create" && !slugTouched && nameValue) {
+      setValue("slug", slugify(nameValue), { shouldValidate: false });
     }
   }, [nameValue, slugTouched, mode, setValue]);
 
@@ -170,15 +231,65 @@ export function ProductForm({ mode, productId, initialData }: ProductFormProps) 
     async (values: ProductFormValues) => {
       setSubmitError(null);
       try {
-        const endpoint = mode === 'create' ? '/api/products' : `/api/products/${productId}`;
-        const method = mode === 'create' ? 'POST' : 'PUT';
+        const endpoint =
+          mode === "create" ? "/api/products" : `/api/products/${productId}`;
+        const method = mode === "create" ? "POST" : "PUT";
 
         const payload: Record<string, unknown> = {
           ...values,
           compareAtPrice:
-            values.compareAtPrice === null || values.compareAtPrice === undefined || Number.isNaN(values.compareAtPrice)
+            values.compareAtPrice === null ||
+            values.compareAtPrice === undefined ||
+            Number.isNaN(values.compareAtPrice)
               ? null
               : values.compareAtPrice,
+          cost:
+            values.cost === null ||
+            values.cost === undefined ||
+            Number.isNaN(values.cost)
+              ? null
+              : values.cost,
+          barcode: values.barcode?.trim() || null,
+          safetyStock: Number.isFinite(values.safetyStock)
+            ? values.safetyStock
+            : 0,
+          reorderPoint:
+            values.reorderPoint === null ||
+            values.reorderPoint === undefined ||
+            Number.isNaN(values.reorderPoint)
+              ? null
+              : values.reorderPoint,
+          brand: values.brand?.trim() || null,
+          productImages: normalizeImageOrder(productImages).map(
+            ({ imageUrl, publicId, altText, sortOrder, isCover }) => ({
+              imageUrl,
+              publicId,
+              altText,
+              sortOrder,
+              isCover,
+            }),
+          ),
+          detailBlocks: normalizeBlockOrder(detailBlocks).map(
+            ({
+              type,
+              title,
+              body,
+              imageUrl,
+              imagePublicId,
+              imageAlt,
+              sortOrder,
+              isEnabled,
+            }) => ({
+              type,
+              title,
+              body,
+              imageUrl,
+              imagePublicId,
+              imageAlt,
+              sortOrder,
+              isEnabled,
+            }),
+          ),
         };
 
         // 多供應商：VENDOR 不可指派 vendorId（後端亦會強制忽略），前端移除以避免誤傳
@@ -186,33 +297,50 @@ export function ProductForm({ mode, productId, initialData }: ProductFormProps) 
           delete payload.vendorId;
         } else {
           payload.vendorId =
-            values.vendorId === '' || values.vendorId === undefined ? null : values.vendorId;
+            values.vendorId === "" || values.vendorId === undefined
+              ? null
+              : values.vendorId;
+        }
+        if (!canManagePlanning) {
+          delete payload.cost;
+          delete payload.safetyStock;
+          delete payload.reorderPoint;
+          delete payload.brand;
         }
 
         const res = await fetch(endpoint, {
           method,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
         const json = await res.json();
 
         if (!res.ok || !json.success) {
-          const message = json?.error?.message || '儲存失敗，請稍後再試';
+          const message = json?.error?.message || "儲存失敗，請稍後再試";
           setSubmitError(message);
           toast.error(message);
           return;
         }
 
-        toast.success(mode === 'create' ? '商品已建立' : '商品已更新');
-        router.push('/products');
+        toast.success(mode === "create" ? "商品已建立" : "商品已更新");
+        router.push("/products");
         router.refresh();
       } catch {
-        const message = '網路連線異常，請稍後再試';
+        const message = "網路連線異常，請稍後再試";
         setSubmitError(message);
         toast.error(message);
       }
     },
-    [mode, productId, router, toast, canAssignVendor]
+    [
+      mode,
+      productId,
+      router,
+      toast,
+      canAssignVendor,
+      canManagePlanning,
+      productImages,
+      detailBlocks,
+    ],
   );
 
   return (
@@ -227,15 +355,25 @@ export function ProductForm({ mode, productId, initialData }: ProductFormProps) 
         {/* 左側：主資訊區 */}
         <div className="space-y-6 lg:col-span-2">
           <section className="rounded-xl border border-gray-200 bg-white p-6">
-            <h2 className="mb-4 text-sm font-semibold text-gray-900">基本資訊</h2>
+            <h2 className="mb-4 text-sm font-semibold text-gray-900">
+              基本資訊
+            </h2>
 
             <div className="space-y-4">
               <div>
                 <label htmlFor="name" className={labelClass}>
                   商品名稱 <span className="text-rose-500">*</span>
                 </label>
-                <input id="name" type="text" className={inputClass} placeholder="例如：經典藍牙耳機" {...register('name')} />
-                {errors.name && <p className={errorClass}>{errors.name.message}</p>}
+                <input
+                  id="name"
+                  type="text"
+                  className={inputClass}
+                  placeholder="例如：經典藍牙耳機"
+                  {...register("name")}
+                />
+                {errors.name && (
+                  <p className={errorClass}>{errors.name.message}</p>
+                )}
               </div>
 
               <div>
@@ -247,12 +385,16 @@ export function ProductForm({ mode, productId, initialData }: ProductFormProps) 
                   type="text"
                   className={inputClass}
                   placeholder="例如：classic-bluetooth-earphone"
-                  {...register('slug', {
+                  {...register("slug", {
                     onChange: () => setSlugTouched(true),
                   })}
                 />
-                <p className="mt-1 text-xs text-gray-400">僅允許小寫英文、數字與連字號。新增時會依名稱自動生成，亦可手動修改。</p>
-                {errors.slug && <p className={errorClass}>{errors.slug.message}</p>}
+                <p className="mt-1 text-xs text-gray-400">
+                  僅允許小寫英文、數字與連字號。新增時會依名稱自動生成，亦可手動修改。
+                </p>
+                {errors.slug && (
+                  <p className={errorClass}>{errors.slug.message}</p>
+                )}
               </div>
 
               <div>
@@ -264,41 +406,53 @@ export function ProductForm({ mode, productId, initialData }: ProductFormProps) 
                   rows={8}
                   className={`${inputClass} resize-y`}
                   placeholder="請輸入商品的詳細描述..."
-                  {...register('description')}
+                  {...register("description")}
                 />
-                {errors.description && <p className={errorClass}>{errors.description.message}</p>}
+                {errors.description && (
+                  <p className={errorClass}>{errors.description.message}</p>
+                )}
               </div>
             </div>
           </section>
 
           <section className="rounded-xl border border-gray-200 bg-white p-6">
-            <h2 className="mb-4 text-sm font-semibold text-gray-900">商品圖片</h2>
-            <div>
-              <label className={labelClass}>
-                封面圖片 <span className="text-rose-500">*</span>
-              </label>
-              <p className="mb-2 text-xs text-gray-400">上傳成功後將自動儲存至雲端（Cloudinary）並套用於商品封面。</p>
-              <Controller
-                control={control}
-                name="coverImage"
-                render={({ field }) => (
-                  <ImageUpload
-                    value={field.value}
-                    onChange={field.onChange}
-                    onUploadingChange={setIsUploading}
-                    disabled={isSubmitting}
-                  />
-                )}
-              />
-              {errors.coverImage && <p className={`${errorClass} mt-2`}>{errors.coverImage.message}</p>}
-            </div>
+            <h2 className="mb-4 text-sm font-semibold text-gray-900">
+              商品圖片
+            </h2>
+            <ProductImagesEditor
+              value={productImages}
+              onChange={setProductImages}
+              onUploadingChange={setIsUploading}
+              disabled={isSubmitting}
+              canUpload={canAssignVendor}
+            />
+            {errors.coverImage && (
+              <p className={`${errorClass} mt-2`}>
+                {errors.coverImage.message}
+              </p>
+            )}
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-6">
+            <h2 className="mb-4 text-sm font-semibold text-gray-900">
+              商品內容區塊
+            </h2>
+            <ProductDetailBlocksEditor
+              value={detailBlocks}
+              onChange={setDetailBlocks}
+              onUploadingChange={setIsUploading}
+              disabled={isSubmitting}
+              canUpload={canAssignVendor}
+            />
           </section>
         </div>
 
         {/* 右側：設定區 */}
         <div className="space-y-6">
           <section className="rounded-xl border border-gray-200 bg-white p-6">
-            <h2 className="mb-4 text-sm font-semibold text-gray-900">價格與庫存</h2>
+            <h2 className="mb-4 text-sm font-semibold text-gray-900">
+              價格與庫存
+            </h2>
             <div className="space-y-4">
               <div>
                 <label htmlFor="price" className={labelClass}>
@@ -310,9 +464,11 @@ export function ProductForm({ mode, productId, initialData }: ProductFormProps) 
                   step="0.01"
                   min="0"
                   className={inputClass}
-                  {...register('price', { valueAsNumber: true })}
+                  {...register("price", { valueAsNumber: true })}
                 />
-                {errors.price && <p className={errorClass}>{errors.price.message}</p>}
+                {errors.price && (
+                  <p className={errorClass}>{errors.price.message}</p>
+                )}
               </div>
 
               <div>
@@ -329,23 +485,53 @@ export function ProductForm({ mode, productId, initialData }: ProductFormProps) 
                       step="0.01"
                       min="0"
                       className={inputClass}
-                      value={field.value === null || field.value === undefined ? '' : field.value}
+                      value={
+                        field.value === null || field.value === undefined
+                          ? ""
+                          : field.value
+                      }
                       onChange={(e) => {
                         const v = e.target.value;
-                        field.onChange(v === '' ? null : Number(v));
+                        field.onChange(v === "" ? null : Number(v));
                       }}
                     />
                   )}
                 />
-                {errors.compareAtPrice && <p className={errorClass}>{errors.compareAtPrice.message}</p>}
+                {errors.compareAtPrice && (
+                  <p className={errorClass}>{errors.compareAtPrice.message}</p>
+                )}
               </div>
 
               <div>
                 <label htmlFor="sku" className={labelClass}>
                   SKU <span className="text-rose-500">*</span>
                 </label>
-                <input id="sku" type="text" className={inputClass} placeholder="例如：BT-EAR-001" {...register('sku')} />
-                {errors.sku && <p className={errorClass}>{errors.sku.message}</p>}
+                <input
+                  id="sku"
+                  type="text"
+                  className={inputClass}
+                  placeholder="例如：BT-EAR-001"
+                  {...register("sku")}
+                />
+                {errors.sku && (
+                  <p className={errorClass}>{errors.sku.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="barcode" className={labelClass}>
+                  Barcode
+                </label>
+                <input
+                  id="barcode"
+                  type="text"
+                  className={inputClass}
+                  placeholder="例如：DEMO-BARCODE-001"
+                  {...register("barcode")}
+                />
+                {errors.barcode && (
+                  <p className={errorClass}>{errors.barcode.message}</p>
+                )}
               </div>
 
               <div>
@@ -358,21 +544,124 @@ export function ProductForm({ mode, productId, initialData }: ProductFormProps) 
                   min="0"
                   step="1"
                   className={inputClass}
-                  {...register('stock', { valueAsNumber: true })}
+                  {...register("stock", { valueAsNumber: true })}
                 />
-                {errors.stock && <p className={errorClass}>{errors.stock.message}</p>}
+                {errors.stock && (
+                  <p className={errorClass}>{errors.stock.message}</p>
+                )}
               </div>
+
+              {canManagePlanning && (
+                <>
+                  <div>
+                    <label htmlFor="cost" className={labelClass}>
+                      成本
+                    </label>
+                    <Controller
+                      control={control}
+                      name="cost"
+                      render={({ field }) => (
+                        <input
+                          id="cost"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className={inputClass}
+                          value={field.value ?? ""}
+                          onChange={(event) =>
+                            field.onChange(
+                              event.target.value === ""
+                                ? null
+                                : Number(event.target.value),
+                            )
+                          }
+                        />
+                      )}
+                    />
+                    {errors.cost && (
+                      <p className={errorClass}>{errors.cost.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label htmlFor="brand" className={labelClass}>
+                      品牌
+                    </label>
+                    <input
+                      id="brand"
+                      type="text"
+                      className={inputClass}
+                      {...register("brand")}
+                    />
+                    {errors.brand && (
+                      <p className={errorClass}>{errors.brand.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label htmlFor="safetyStock" className={labelClass}>
+                      安全庫存
+                    </label>
+                    <input
+                      id="safetyStock"
+                      type="number"
+                      min="0"
+                      step="1"
+                      className={inputClass}
+                      {...register("safetyStock", { valueAsNumber: true })}
+                    />
+                    {errors.safetyStock && (
+                      <p className={errorClass}>{errors.safetyStock.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label htmlFor="reorderPoint" className={labelClass}>
+                      補貨點
+                    </label>
+                    <Controller
+                      control={control}
+                      name="reorderPoint"
+                      render={({ field }) => (
+                        <input
+                          id="reorderPoint"
+                          type="number"
+                          min="0"
+                          step="1"
+                          className={inputClass}
+                          value={field.value ?? ""}
+                          onChange={(event) =>
+                            field.onChange(
+                              event.target.value === ""
+                                ? null
+                                : Number(event.target.value),
+                            )
+                          }
+                        />
+                      )}
+                    />
+                    {errors.reorderPoint && (
+                      <p className={errorClass}>
+                        {errors.reorderPoint.message}
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </section>
 
           <section className="rounded-xl border border-gray-200 bg-white p-6">
-            <h2 className="mb-4 text-sm font-semibold text-gray-900">分類與狀態</h2>
+            <h2 className="mb-4 text-sm font-semibold text-gray-900">
+              分類與狀態
+            </h2>
             <div className="space-y-4">
               <div>
                 <label htmlFor="categoryId" className={labelClass}>
                   商品分類 <span className="text-rose-500">*</span>
                 </label>
-                <select id="categoryId" className={inputClass} {...register('categoryId')}>
+                <select
+                  id="categoryId"
+                  className={inputClass}
+                  {...register("categoryId")}
+                >
                   <option value="">請選擇分類...</option>
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -380,21 +669,29 @@ export function ProductForm({ mode, productId, initialData }: ProductFormProps) 
                     </option>
                   ))}
                 </select>
-                {errors.categoryId && <p className={errorClass}>{errors.categoryId.message}</p>}
+                {errors.categoryId && (
+                  <p className={errorClass}>{errors.categoryId.message}</p>
+                )}
               </div>
 
               <div>
                 <label htmlFor="status" className={labelClass}>
                   上下架狀態 <span className="text-rose-500">*</span>
                 </label>
-                <select id="status" className={inputClass} {...register('status')}>
+                <select
+                  id="status"
+                  className={inputClass}
+                  {...register("status")}
+                >
                   {STATUS_OPTIONS.map((s) => (
                     <option key={s.value} value={s.value}>
                       {s.label}
                     </option>
                   ))}
                 </select>
-                {errors.status && <p className={errorClass}>{errors.status.message}</p>}
+                {errors.status && (
+                  <p className={errorClass}>{errors.status.message}</p>
+                )}
               </div>
             </div>
           </section>
@@ -402,7 +699,9 @@ export function ProductForm({ mode, productId, initialData }: ProductFormProps) 
           {/* 多供應商：指派供應商（僅 SUPER_ADMIN / ADMIN 可見） */}
           {canAssignVendor && (
             <section className="rounded-xl border border-gray-200 bg-white p-6">
-              <h2 className="mb-4 text-sm font-semibold text-gray-900">供應商指派</h2>
+              <h2 className="mb-4 text-sm font-semibold text-gray-900">
+                供應商指派
+              </h2>
               <div>
                 <label htmlFor="vendorId" className={labelClass}>
                   指派供應商
@@ -414,8 +713,12 @@ export function ProductForm({ mode, productId, initialData }: ProductFormProps) 
                     <select
                       id="vendorId"
                       className={inputClass}
-                      value={field.value ?? ''}
-                      onChange={(e) => field.onChange(e.target.value === '' ? null : e.target.value)}
+                      value={field.value ?? ""}
+                      onChange={(e) =>
+                        field.onChange(
+                          e.target.value === "" ? null : e.target.value,
+                        )
+                      }
                     >
                       <option value="">平台自營（不指派供應商）</option>
                       {vendors.map((v) => (
@@ -440,7 +743,7 @@ export function ProductForm({ mode, productId, initialData }: ProductFormProps) 
         <div className="mx-auto flex max-w-6xl items-center justify-end gap-3 px-6 py-3">
           <button
             type="button"
-            onClick={() => router.push('/products')}
+            onClick={() => router.push("/products")}
             disabled={isSubmitting}
             className="rounded-lg border border-gray-300 bg-white px-5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
@@ -449,16 +752,31 @@ export function ProductForm({ mode, productId, initialData }: ProductFormProps) 
           <button
             type="submit"
             disabled={isSubmitting || isUploading}
-            title={isUploading ? '圖片上傳中，請稍後' : undefined}
+            title={isUploading ? "圖片上傳中，請稍後" : undefined}
             className="flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSubmitting && (
-              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              <svg
+                className="h-4 w-4 animate-spin"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
               </svg>
             )}
-            {mode === 'create' ? '建立商品' : '儲存變更'}
+            {mode === "create" ? "建立商品" : "儲存變更"}
           </button>
         </div>
       </div>
