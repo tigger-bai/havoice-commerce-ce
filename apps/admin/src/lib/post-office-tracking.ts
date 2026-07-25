@@ -10,7 +10,7 @@ export type ParsedPostOfficeTrackingInput = {
 
 export type ParsedChunghwaPostTrackingInput = {
   trackingNumber: string | null;
-  source: 'plain-number' | 'post-qr-url' | 'unknown';
+  source: 'plain-number' | 'post-qr-url' | 'post-equery-url' | 'unknown';
   error?: string;
 };
 
@@ -134,6 +134,70 @@ function parsePostOfficeQrUrl(value: string): ParsedChunghwaPostTrackingInput | 
   };
 }
 
+function parsePostOfficeEqueryUrl(value: string): ParsedChunghwaPostTrackingInput | null {
+  let url: URL;
+
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+
+  if (url.hostname.toLowerCase() !== 'postserv.post.gov.tw') {
+    return {
+      trackingNumber: null,
+      source: 'unknown',
+      error: '無法解析中華郵政 QR Code，請改掃郵件號碼或手動輸入。',
+    };
+  }
+
+  if (url.pathname !== '/pstmail/equery') {
+    return null;
+  }
+
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return {
+      trackingNumber: null,
+      source: 'unknown',
+      error: '無法解析中華郵政 QR Code，請改掃郵件號碼或手動輸入。',
+    };
+  }
+
+  if (url.searchParams.get('type') !== '1') {
+    return {
+      trackingNumber: null,
+      source: 'unknown',
+      error: '無法解析中華郵政 QR Code，請改掃郵件號碼或手動輸入。',
+    };
+  }
+
+  const encodedMailNo = url.searchParams.get('mailno');
+  if (!encodedMailNo) {
+    return {
+      trackingNumber: null,
+      source: 'unknown',
+      error: '無法解析中華郵政 QR Code，請改掃郵件號碼或手動輸入。',
+    };
+  }
+
+  const plainTrackingNumber = normalizeSeparatedDigits(encodedMailNo);
+  const decodedMailNo = plainTrackingNumber ? null : decodeBase64Ascii(encodedMailNo);
+  const trackingNumber =
+    plainTrackingNumber ?? (decodedMailNo ? normalizeSeparatedDigits(decodedMailNo.trim()) : null);
+  if (!trackingNumber) {
+    return {
+      trackingNumber: null,
+      source: 'unknown',
+      error: '無法解析中華郵政 QR Code，請改掃郵件號碼或手動輸入。',
+    };
+  }
+
+  return {
+    trackingNumber,
+    source: 'post-equery-url',
+  };
+}
+
 function extractTrackingNumberFromText(value: string, allowEmbedded: boolean): string | null {
   const continuousTwenty = value.match(/\d{20}/)?.[0];
   if (continuousTwenty) return continuousTwenty;
@@ -196,6 +260,7 @@ export function parseChunghwaPostTrackingInput(input: string): ParsedChunghwaPos
 
   if (hasUrlLikeInput(trimmed)) {
     return (
+      parsePostOfficeEqueryUrl(trimmed) ??
       parsePostOfficeQrUrl(trimmed) ?? {
         trackingNumber: null,
         source: 'unknown',
@@ -219,7 +284,10 @@ export function parsePostOfficeTrackingInput(input: string): ParsedPostOfficeTra
   if (chunghwaPostParsed.trackingNumber) {
     return {
       trackingNumber: chunghwaPostParsed.trackingNumber,
-      trackingUrl: chunghwaPostParsed.source === 'post-qr-url' ? new URL(trimmed).toString() : undefined,
+      trackingUrl:
+        chunghwaPostParsed.source === 'post-qr-url' || chunghwaPostParsed.source === 'post-equery-url'
+          ? new URL(trimmed).toString()
+          : undefined,
       rawInput,
     };
   }
@@ -284,6 +352,70 @@ export const CHUNGHWA_POST_TRACKING_PARSE_TEST_CASES = [
       'https://postserv.post.gov.tw/pstmail/main_mail.html?targetTxn=EB500100&ts=P3RzPURFTU8mbWFpbG5vPU1EQXdNREF3TURBd01EQXdNREF3TURBd01EQT0mcj1ERU1P',
     expectedTrackingNumber: '00000000000000000000',
     expectedSource: 'post-qr-url',
+  },
+  {
+    name: 'Chunghwa Post equery URL over http',
+    input:
+      'http://postserv.post.gov.tw/pstmail/equery?type=1&mailno=OTc2NzQyMjIwMDcxNzA3MzcwMDE=',
+    expectedTrackingNumber: '97674222007170737001',
+    expectedSource: 'post-equery-url',
+  },
+  {
+    name: 'Chunghwa Post equery URL with plain tracking number',
+    input: 'https://postserv.post.gov.tw/pstmail/equery?type=1&mailno=97674222007170737001',
+    expectedTrackingNumber: '97674222007170737001',
+    expectedSource: 'post-equery-url',
+  },
+  {
+    name: 'Chunghwa Post equery URL with URL encoded padding',
+    input:
+      'https://postserv.post.gov.tw/pstmail/equery?type=1&mailno=OTc2NzQyMjIwMDcxNzA3MzcwMDE%3D',
+    expectedTrackingNumber: '97674222007170737001',
+    expectedSource: 'post-equery-url',
+  },
+  {
+    name: 'Chunghwa Post equery URL without padding',
+    input:
+      'https://postserv.post.gov.tw/pstmail/equery?type=1&mailno=OTc2NzQyMjIwMDcxNzA3MzcwMDE',
+    expectedTrackingNumber: '97674222007170737001',
+    expectedSource: 'post-equery-url',
+  },
+  {
+    name: 'Chunghwa Post equery URL with invalid host',
+    input:
+      'https://postserv.post.gov.tw.example.com/pstmail/equery?type=1&mailno=OTc2NzQyMjIwMDcxNzA3MzcwMDE=',
+    expectedTrackingNumber: null,
+    expectedSource: 'unknown',
+    expectError: true,
+  },
+  {
+    name: 'Chunghwa Post equery URL with invalid pathname',
+    input:
+      'https://postserv.post.gov.tw/pstmail/other?type=1&mailno=OTc2NzQyMjIwMDcxNzA3MzcwMDE=',
+    expectedTrackingNumber: null,
+    expectedSource: 'unknown',
+    expectError: true,
+  },
+  {
+    name: 'Chunghwa Post equery URL without mailno',
+    input: 'https://postserv.post.gov.tw/pstmail/equery?type=1',
+    expectedTrackingNumber: null,
+    expectedSource: 'unknown',
+    expectError: true,
+  },
+  {
+    name: 'Chunghwa Post equery URL with invalid base64',
+    input: 'https://postserv.post.gov.tw/pstmail/equery?type=1&mailno=invalid***',
+    expectedTrackingNumber: null,
+    expectedSource: 'unknown',
+    expectError: true,
+  },
+  {
+    name: 'Chunghwa Post equery URL with invalid decoded length',
+    input: 'https://postserv.post.gov.tw/pstmail/equery?type=1&mailno=MTIzNDU2',
+    expectedTrackingNumber: null,
+    expectedSource: 'unknown',
+    expectError: true,
   },
   {
     name: 'non post office URL',

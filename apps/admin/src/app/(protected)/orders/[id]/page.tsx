@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
@@ -11,6 +11,7 @@ import { getShipmentProviderLabel } from '@/lib/shipment-provider-labels';
 import {
   getPostOfficeTrackingUrl,
   isPostOfficeTrackingNumber,
+  parseChunghwaPostTrackingInput,
   parsePostOfficeTrackingInput,
 } from '@/lib/post-office-tracking';
 import { formatCurrency, formatDateTime, safeNumber } from '@/lib/utils';
@@ -363,6 +364,11 @@ const PAYMENT_CONFIRMATION_METHODS = [
   { value: 'OTHER', label: '其他' },
 ];
 
+const SCANNER_MAX_KEY_INTERVAL_MS = 80;
+const SCANNER_BUFFER_RESET_MS = 300;
+const SCANNER_MIN_INPUT_LENGTH = 14;
+const TRACKING_INPUT_DATA_ATTRIBUTE = 'logisticsTrackingInput';
+
 function getTodayInputDate(): string {
   const today = new Date();
   today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
@@ -383,6 +389,15 @@ function getPrimaryTrackingNumber(order: Pick<OrderDetail, 'trackingNumber' | 's
 
 function getValidPostOfficeTrackingNumber(order: Pick<OrderDetail, 'trackingNumber' | 'shippingTrackingNumber' | 'shipments'>): string {
   return getOrderTrackingCandidates(order).find((value) => isPostOfficeTrackingNumber(value)) || '';
+}
+
+function isTextEditingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.dataset[TRACKING_INPUT_DATA_ATTRIBUTE] === 'true') return true;
+
+  const tagName = target.tagName.toLowerCase();
+  if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') return true;
+  return target.isContentEditable || Boolean(target.closest('[contenteditable="true"]'));
 }
 
 export default function OrderDetailPage() {
@@ -411,6 +426,10 @@ export default function OrderDetailPage() {
     type: 'idle',
     message: '',
   });
+  const scanBufferRef = useRef('');
+  const scanLastKeyAtRef = useRef(0);
+  const scanResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savingTrackingRef = useRef(false);
 
   const fetchOrder = useCallback(async () => {
     if (!orderId) return;
@@ -439,10 +458,10 @@ export default function OrderDetailPage() {
     fetchOrder();
   }, [fetchOrder]);
 
-  const saveTracking = async (inputOverride?: string) => {
+  const saveTracking = useCallback(async (inputToParse: string) => {
     if (!orderId) return;
+    if (savingTrackingRef.current) return;
 
-    const inputToParse = inputOverride ?? trackingInput;
     const parsedTracking = parsePostOfficeTrackingInput(inputToParse);
     if (inputToParse.trim() && !parsedTracking.trackingNumber) {
       toast.error(parsedTracking.error || '無法從輸入內容解析郵局郵件號碼，請確認後再儲存');
@@ -450,6 +469,7 @@ export default function OrderDetailPage() {
     }
 
     const trackingNumberToSave = parsedTracking.trackingNumber;
+    savingTrackingRef.current = true;
     setSavingTracking(true);
 
     try {
@@ -478,9 +498,87 @@ export default function OrderDetailPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '儲存物流單號失敗');
     } finally {
+      savingTrackingRef.current = false;
       setSavingTracking(false);
     }
-  };
+  }, [fetchOrder, orderId, toast]);
+
+  useEffect(() => {
+    if (!orderId || !order) return;
+
+    const resetScanBuffer = () => {
+      scanBufferRef.current = '';
+      scanLastKeyAtRef.current = 0;
+      if (scanResetTimerRef.current) {
+        clearTimeout(scanResetTimerRef.current);
+        scanResetTimerRef.current = null;
+      }
+    };
+
+    const handleGlobalScannerKeydown = (event: KeyboardEvent) => {
+      if (savingTrackingRef.current) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (isTextEditingTarget(event.target)) return;
+
+      if (event.key === 'Enter') {
+        const scannedInput = scanBufferRef.current.trim();
+        resetScanBuffer();
+        if (!scannedInput) return;
+
+        const compactInput = scannedInput.replace(/[\s-]+/g, '');
+        const looksLikeTrackingScan =
+          scannedInput.includes('postserv.post.gov.tw') || compactInput.length >= SCANNER_MIN_INPUT_LENGTH;
+        if (!looksLikeTrackingScan) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const parsed = parseChunghwaPostTrackingInput(scannedInput);
+        if (!parsed.trackingNumber) {
+          toast.error('無法解析中華郵政 QR Code，請重新掃描或手動輸入。');
+          return;
+        }
+
+        const existingTrackingNumber = getPrimaryTrackingNumber(order);
+        if (
+          existingTrackingNumber &&
+          existingTrackingNumber !== parsed.trackingNumber &&
+          !window.confirm(`此訂單已有物流追蹤號 ${existingTrackingNumber}，是否覆蓋為 ${parsed.trackingNumber}？`)
+        ) {
+          return;
+        }
+
+        setTrackingInput(parsed.trackingNumber);
+        void saveTracking(parsed.trackingNumber);
+        return;
+      }
+
+      if (event.key.length !== 1) return;
+
+      const now = Date.now();
+      const elapsed = scanLastKeyAtRef.current ? now - scanLastKeyAtRef.current : 0;
+      scanBufferRef.current =
+        !scanLastKeyAtRef.current || elapsed > SCANNER_MAX_KEY_INTERVAL_MS
+          ? event.key
+          : `${scanBufferRef.current}${event.key}`;
+      scanLastKeyAtRef.current = now;
+
+      if (scanBufferRef.current.length > 2048) {
+        scanBufferRef.current = scanBufferRef.current.slice(-2048);
+      }
+
+      if (scanResetTimerRef.current) {
+        clearTimeout(scanResetTimerRef.current);
+      }
+      scanResetTimerRef.current = setTimeout(resetScanBuffer, SCANNER_BUFFER_RESET_MS);
+    };
+
+    window.addEventListener('keydown', handleGlobalScannerKeydown);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalScannerKeydown);
+      resetScanBuffer();
+    };
+  }, [order, orderId, saveTracking, toast]);
 
   const submitPaymentConfirmation = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1129,12 +1227,19 @@ export default function OrderDetailPage() {
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <input
               type="text"
+              data-logistics-tracking-input="true"
               value={trackingInput}
               onChange={(e) => setTrackingInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key !== 'Enter') return;
                 e.preventDefault();
-                void saveTracking(e.currentTarget.value);
+                e.stopPropagation();
+                const inputValue = e.currentTarget.value;
+                const parsed = parsePostOfficeTrackingInput(inputValue);
+                if (parsed.trackingNumber) {
+                  setTrackingInput(parsed.trackingNumber);
+                }
+                void saveTracking(inputValue);
               }}
               placeholder="例如：97495522007170235000，或直接掃描郵局收據 QR Code"
               className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
@@ -1143,7 +1248,7 @@ export default function OrderDetailPage() {
             <button
               type="button"
               disabled={savingTracking || trackingInput.trim() === (order.trackingNumber ?? '')}
-              onClick={() => saveTracking()}
+              onClick={() => saveTracking(trackingInput)}
               className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
             >
               {savingTracking ? '儲存中...' : '儲存單號'}
