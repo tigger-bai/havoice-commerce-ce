@@ -246,9 +246,14 @@ model Product {
   description    String        @db.Text
   price          Decimal       @db.Decimal(10, 2)
   compareAtPrice Decimal?      @db.Decimal(10, 2) // 促銷前的原價，用於前端顯示折扣
+  cost           Decimal?      @db.Decimal(10, 2)
   sku            String        @unique
+  barcode        String?       @unique
   stock          Int           @default(0)
   version        Int           @default(0)
+  safetyStock    Int           @default(0)
+  reorderPoint   Int?
+  brand          String?
   coverImage     String
   images         String?       @db.Text // 以 JSON 陣列字串或逗號分隔儲存多張圖片
   categoryId     String
@@ -267,10 +272,54 @@ model Product {
   orderItems            OrderItem[]
   inventoryLogs         InventoryLog[]
   recommendedInArticles ArticleProductRecommendation[]
+  productImages         ProductImage[]
+  detailBlocks          ProductDetailBlock[]
 
   @@index([slug])
   @@index([categoryId])
   @@index([vendorId])
+  @@index([brand])
+  @@index([safetyStock])
+  @@index([reorderPoint])
+}
+
+model ProductImage {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  imageUrl  String  @db.Text
+  publicId  String?
+  altText   String?
+  sortOrder Int     @default(0)
+  isCover   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId, sortOrder])
+  @@index([productId, isCover])
+}
+
+model ProductDetailBlock {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  type          String
+  title         String?
+  body          String? @db.Text
+  imageUrl      String? @db.Text
+  imagePublicId String?
+  imageAlt      String?
+  sortOrder     Int     @default(0)
+  isEnabled     Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId, sortOrder])
+  @@index([productId, isEnabled])
 }
 
 // Join Table for Product <-> Tag (Many-to-Many)
