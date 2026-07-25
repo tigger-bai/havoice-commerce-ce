@@ -1,11 +1,34 @@
-import { prisma } from '@havoice/database';
+import { prisma } from "@havoice/database";
 import type {
   CreateProductDTO,
   UpdateProductDTO,
   ProductQueryDTO,
   PaginatedResponse,
-} from '@havoice/shared';
-import { NotFoundError, ConflictError } from '../utils/app-error';
+} from "@havoice/shared";
+import { NotFoundError, ConflictError } from "../utils/app-error";
+
+function toPublicProduct<T extends Record<string, unknown>>(product: T) {
+  const {
+    cost: _cost,
+    safetyStock: _safetyStock,
+    reorderPoint: _reorderPoint,
+    barcode: _barcode,
+    ...publicProduct
+  } = product;
+  return publicProduct;
+}
+
+function normalizeImages<
+  T extends { imageUrl: string; isCover?: boolean; sortOrder?: number },
+>(images: T[]) {
+  const requestedCover = images.findIndex((image) => image.isCover);
+  const coverIndex = requestedCover >= 0 ? requestedCover : 0;
+  return images.map((image, index) => ({
+    ...image,
+    sortOrder: index,
+    isCover: index === coverIndex,
+  }));
+}
 
 /**
  * Product Service
@@ -21,13 +44,13 @@ export class ProductService {
    * 取得商品列表（含分頁與篩選）
    */
   async findAll(query: ProductQueryDTO): Promise<PaginatedResponse<unknown>> {
-    const { page, limit, categoryId, status } = query;
+    const { page, limit, categoryId } = query;
     const skip = (page - 1) * limit;
 
     const where = {
       deletedAt: null,
+      status: "PUBLISHED" as const,
       ...(categoryId && { categoryId }),
-      ...(status && { status }),
     };
 
     const [total, products] = await prisma.$transaction([
@@ -36,7 +59,7 @@ export class ProductService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: {
           category: {
             select: { id: true, name: true, slug: true },
@@ -50,10 +73,12 @@ export class ProductService {
       }),
     ]);
 
-    const formattedProducts = products.map((product) => ({
-      ...product,
-      tags: product.tags.map((t) => t.tag),
-    }));
+    const formattedProducts = products.map((product) =>
+      toPublicProduct({
+        ...product,
+        tags: product.tags.map((t) => t.tag),
+      }),
+    );
 
     return {
       data: formattedProducts,
@@ -71,7 +96,7 @@ export class ProductService {
    */
   async findById(id: string) {
     const product = await prisma.product.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, status: "PUBLISHED" },
       include: {
         category: {
           select: { id: true, name: true, slug: true },
@@ -81,17 +106,54 @@ export class ProductService {
             tag: { select: { id: true, name: true, slug: true } },
           },
         },
+        productImages: {
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          select: {
+            id: true,
+            imageUrl: true,
+            altText: true,
+            sortOrder: true,
+            isCover: true,
+          },
+        },
+        detailBlocks: {
+          where: { isEnabled: true },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          select: {
+            id: true,
+            type: true,
+            title: true,
+            body: true,
+            imageUrl: true,
+            imageAlt: true,
+            sortOrder: true,
+            isEnabled: true,
+          },
+        },
       },
     });
 
     if (!product) {
-      throw new NotFoundError('商品', id);
+      throw new NotFoundError("商品", id);
     }
 
-    return {
+    return toPublicProduct({
       ...product,
+      productImages: product.productImages.length
+        ? product.productImages
+        : product.coverImage
+          ? [
+              {
+                id: "legacy-cover",
+                imageUrl: product.coverImage,
+                altText: product.name,
+                sortOrder: 0,
+                isCover: true,
+              },
+            ]
+          : [],
       tags: product.tags.map((t) => t.tag),
-    };
+    });
   }
 
   /**
@@ -99,7 +161,7 @@ export class ProductService {
    */
   async findBySlug(slug: string) {
     const product = await prisma.product.findFirst({
-      where: { slug, deletedAt: null, status: 'PUBLISHED' },
+      where: { slug, deletedAt: null, status: "PUBLISHED" },
       include: {
         category: {
           select: { id: true, name: true, slug: true },
@@ -109,24 +171,65 @@ export class ProductService {
             tag: { select: { id: true, name: true, slug: true } },
           },
         },
+        productImages: {
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          select: {
+            id: true,
+            imageUrl: true,
+            altText: true,
+            sortOrder: true,
+            isCover: true,
+          },
+        },
+        detailBlocks: {
+          where: { isEnabled: true },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          select: {
+            id: true,
+            type: true,
+            title: true,
+            body: true,
+            imageUrl: true,
+            imageAlt: true,
+            sortOrder: true,
+            isEnabled: true,
+          },
+        },
       },
     });
 
     if (!product) {
-      throw new NotFoundError('商品', slug);
+      throw new NotFoundError("商品", slug);
     }
 
-    return {
+    return toPublicProduct({
       ...product,
+      productImages: product.productImages.length
+        ? product.productImages
+        : product.coverImage
+          ? [
+              {
+                id: "legacy-cover",
+                imageUrl: product.coverImage,
+                altText: product.name,
+                sortOrder: 0,
+                isCover: true,
+              },
+            ]
+          : [],
       tags: product.tags.map((t) => t.tag),
-    };
+    });
   }
 
   /**
    * 建立商品
    */
   async create(data: CreateProductDTO) {
-    const { tagIds, ...productData } = data;
+    const { tagIds, productImages, detailBlocks, ...productData } = data;
+    const normalizedImages = normalizeImages(productImages ?? []);
+    const coverImage =
+      normalizedImages.find((image) => image.isCover)?.imageUrl ??
+      productData.coverImage;
 
     // 檢查 slug 唯一性
     const slugExists = await prisma.product.findUnique({
@@ -143,13 +246,34 @@ export class ProductService {
     if (skuExists) {
       throw new ConflictError(`SKU "${productData.sku}" 已被使用`);
     }
+    if (productData.barcode) {
+      const barcodeExists = await prisma.product.findUnique({
+        where: { barcode: productData.barcode },
+      });
+      if (barcodeExists)
+        throw new ConflictError(`商品條碼 "${productData.barcode}" 已被使用`);
+    }
 
     const product = await prisma.product.create({
       data: {
         ...productData,
+        coverImage,
         tags: {
           create: tagIds.map((tagId) => ({ tagId })),
         },
+        ...(normalizedImages.length && {
+          productImages: {
+            create: normalizedImages,
+          },
+        }),
+        ...(detailBlocks?.length && {
+          detailBlocks: {
+            create: detailBlocks.map((block, index) => ({
+              ...block,
+              sortOrder: index,
+            })),
+          },
+        }),
       },
       include: {
         category: { select: { id: true, name: true, slug: true } },
@@ -161,10 +285,10 @@ export class ProductService {
       },
     });
 
-    return {
+    return toPublicProduct({
       ...product,
       tags: product.tags.map((t) => t.tag),
-    };
+    });
   }
 
   /**
@@ -175,7 +299,7 @@ export class ProductService {
       where: { id, deletedAt: null },
     });
     if (!existing) {
-      throw new NotFoundError('商品', id);
+      throw new NotFoundError("商品", id);
     }
 
     // 若更新 slug，檢查唯一性
@@ -197,17 +321,45 @@ export class ProductService {
         throw new ConflictError(`SKU "${data.sku}" 已被使用`);
       }
     }
+    if (data.barcode && data.barcode !== existing.barcode) {
+      const barcodeConflict = await prisma.product.findUnique({
+        where: { barcode: data.barcode },
+      });
+      if (barcodeConflict)
+        throw new ConflictError(`商品條碼 "${data.barcode}" 已被使用`);
+    }
 
-    const { tagIds, ...productData } = data;
+    const { tagIds, productImages, detailBlocks, ...productData } = data;
+    const normalizedImages =
+      productImages === undefined ? undefined : normalizeImages(productImages);
+    const coverImage = normalizedImages?.find(
+      (image) => image.isCover,
+    )?.imageUrl;
 
     const product = await prisma.product.update({
       where: { id },
       data: {
         ...productData,
+        ...(coverImage && { coverImage }),
         ...(tagIds !== undefined && {
           tags: {
             deleteMany: {},
             create: tagIds.map((tagId) => ({ tagId })),
+          },
+        }),
+        ...(normalizedImages !== undefined && {
+          productImages: {
+            deleteMany: {},
+            create: normalizedImages,
+          },
+        }),
+        ...(detailBlocks !== undefined && {
+          detailBlocks: {
+            deleteMany: {},
+            create: detailBlocks.map((block, index) => ({
+              ...block,
+              sortOrder: index,
+            })),
           },
         }),
       },
@@ -221,10 +373,10 @@ export class ProductService {
       },
     });
 
-    return {
+    return toPublicProduct({
       ...product,
       tags: product.tags.map((t) => t.tag),
-    };
+    });
   }
 
   /**
@@ -235,7 +387,7 @@ export class ProductService {
       where: { id, deletedAt: null },
     });
     if (!existing) {
-      throw new NotFoundError('商品', id);
+      throw new NotFoundError("商品", id);
     }
 
     await prisma.product.update({

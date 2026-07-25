@@ -37,6 +37,7 @@ export interface Product {
   price: string;
   compareAtPrice: string | null;
   sku: string;
+  brand: string | null;
   stock: number;
   coverImage: string;
   images: string | null;
@@ -45,6 +46,27 @@ export interface Product {
   createdAt: string;
   updatedAt: string;
   category: Category;
+  productImages?: ProductImage[];
+  detailBlocks?: ProductDetailBlock[];
+}
+
+export interface ProductImage {
+  id: string;
+  imageUrl: string;
+  altText: string | null;
+  sortOrder: number;
+  isCover: boolean;
+}
+
+export interface ProductDetailBlock {
+  id: string;
+  type: "TEXT" | "IMAGE" | "IMAGE_TEXT" | "DIVIDER" | "NOTICE";
+  title: string | null;
+  body: string | null;
+  imageUrl: string | null;
+  imageAlt: string | null;
+  sortOrder: number;
+  isEnabled: boolean;
 }
 
 export interface RecommendedProduct {
@@ -61,19 +83,19 @@ export interface RecommendedProduct {
 /** 行銷版位類型（與後台 / shared 對齐） */
 export type LayoutSectionType =
   // 新世代大型電商類型
-  | 'HERO_BANNER'
-  | 'THEME_REC'
-  | 'SALES_RANKING'
-  | 'BRAND_CAROUSEL'
-  | 'CATEGORY_FLOOR'
+  | "HERO_BANNER"
+  | "THEME_REC"
+  | "SALES_RANKING"
+  | "BRAND_CAROUSEL"
+  | "CATEGORY_FLOOR"
   // Page Builder 新增積木
-  | 'ICON_NAVIGATION'
-  | 'IMAGE_WITH_TEXT'
-  | 'PROMO_BANNER'
+  | "ICON_NAVIGATION"
+  | "IMAGE_WITH_TEXT"
+  | "PROMO_BANNER"
   // legacy
-  | 'CAROUSEL'
-  | 'GRID'
-  | 'BANNER';
+  | "CAROUSEL"
+  | "GRID"
+  | "BANNER";
 
 export interface LayoutItem {
   id: string;
