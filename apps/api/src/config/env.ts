@@ -56,6 +56,16 @@ applyDotenvFile(path.join(adminRoot, '.env'), {
   onlyKeys: ['ECPAY_LOGISTICS_HASH_KEY', 'ECPAY_LOGISTICS_HASH_IV'],
 });
 
+export function getRequiredEnv(name: string): string {
+  const value = process.env[name];
+
+  if (!value || value.trim().length === 0) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+
+  return value;
+}
+
 const isProduction = process.env.NODE_ENV === 'production';
 const DEV_JWT_SECRET = 'development-only-fallback-secret';
 const jwtSecret = process.env.JWT_SECRET?.trim();
