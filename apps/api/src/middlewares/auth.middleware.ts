@@ -3,7 +3,8 @@ import type { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../services/auth.service';
 import type { AuthTokenPayload } from '@havoice/shared';
 // ✨ 改用官方推薦的 getToken，取代底層的 decode
-import { getToken } from 'next-auth/jwt'; 
+import { getToken } from 'next-auth/jwt';
+import { getRequiredEnv } from '../config/env';
 
 declare global {
   namespace Express {
@@ -13,26 +14,15 @@ declare global {
   }
 }
 
-/**
- * 終極清理 Secret，把所有可能殘留的引號清乾淨
- */
-const getCleanSecret = (): string => {
-  const rawSecret = process.env.NEXTAUTH_SECRET || '';
-  return rawSecret.replace(/['"]/g, ''); // 拔除任何單雙引號
-};
+const nextAuthSecret = getRequiredEnv('NEXTAUTH_SECRET');
 
 export async function authenticateJWT(req: Request, res: Response, next: NextFunction) {
   try {
-    const secret = getCleanSecret();
-
-    // 🔴 測試用 Log：如果還是失敗，看一下這行印出的前5碼是否前後端一致
-    // console.log('API 使用的 Secret 前5碼:', secret.substring(0, 5));
-
     // ✨ 策略一：使用官方 getToken，它會自動掃描 req.cookies 與 req.headers
     // 將 Express req 強制轉型為 any 傳入即可，因為它內部只需要 req.cookies 與 req.headers
     const token = await getToken({ 
       req: req as any, 
-      secret 
+      secret: nextAuthSecret
     });
 
     if (token && token.sub) {
@@ -72,9 +62,15 @@ export async function authenticateJWT(req: Request, res: Response, next: NextFun
 }
 
 export async function optionalAuth(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  const cookieHeader = req.headers.cookie;
+  const hasSessionCookie =
+    typeof cookieHeader === 'string' &&
+    /(?:^|;\s*)(?:(?:__Secure-)?next-auth|authjs)\.session-token=/.test(cookieHeader);
+  const hasAuthCredentials = Boolean(authHeader || hasSessionCookie);
+
   try {
-    const secret = getCleanSecret();
-    const token = await getToken({ req: req as any, secret });
+    const token = await getToken({ req: req as any, secret: nextAuthSecret });
 
     if (token && token.sub) {
       req.user = {
@@ -86,16 +82,35 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
       return next();
     }
 
-    const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const bearerStr = authHeader.split(' ')[1];
       const payload = AuthService.verifyToken(bearerStr);
       req.user = payload;
+      return next();
+    }
+
+    if (hasAuthCredentials) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: '未提供有效認證 Token 或登入已過期，請重新登入',
+          code: 'UNAUTHORIZED',
+        },
+      });
     }
   } catch {
-    // 忽略錯誤，不阻擋
+    if (hasAuthCredentials) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: '未提供有效認證 Token 或登入已過期，請重新登入',
+          code: 'UNAUTHORIZED',
+        },
+      });
+    }
   }
-  next();
+
+  return next();
 }
 
 export function requireRole(...allowedRoles: string[]) {

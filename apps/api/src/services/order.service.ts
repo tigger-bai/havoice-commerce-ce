@@ -226,7 +226,7 @@ export class OrderService {
    * - COD：只建立訂單，不產生綠界 payload
    * - ATM / CREDIT_CARD：建立訂單後產生綠界 AIO payload
    */
-  static async createOrder(dto: CreateOrderDTO, userId: string) {
+  static async createOrder(dto: CreateOrderDTO, userId?: string | null) {
     const {
       items,
       recipientName,
@@ -404,17 +404,19 @@ export class OrderService {
         }
       }
 
-      await tx.cartItem.deleteMany({
-        where: {
-          userId,
-          productId: { in: productIds },
-        },
-      });
+      if (userId) {
+        await tx.cartItem.deleteMany({
+          where: {
+            userId,
+            productId: { in: productIds },
+          },
+        });
+      }
 
       const createdOrder = await tx.order.create({
         data: {
           orderNumber,
-          userId,
+          userId: userId ?? null,
           status: 'PENDING',
           paymentStatus: 'UNPAID',
           totalAmount,
@@ -480,7 +482,7 @@ export class OrderService {
             beforeQuantity: productSnapshot.stock,
             afterQuantity: productSnapshot.stock - item.quantity,
             actorType: 'USER',
-            actorId: userId,
+            actorId: userId ?? null,
             reason: 'order_created',
             metadata: {
               orderNumber: createdOrder.orderNumber,
@@ -654,10 +656,17 @@ export class OrderService {
     });
   }
 
-  static async findById(orderId: string) {
-    const order = await prisma.order.findUnique({
+  static async findById(
+    orderId: string,
+    access: {
+      userId: string;
+      isAdmin: boolean;
+    },
+  ) {
+    const order = await prisma.order.findFirst({
       where: {
         id: orderId,
+        ...(access.isAdmin ? {} : { userId: access.userId }),
       },
       include: {
         items: true,

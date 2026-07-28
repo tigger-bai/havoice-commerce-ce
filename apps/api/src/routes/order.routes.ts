@@ -2,12 +2,16 @@
 import { Router } from 'express';
 import type { Router as ExpressRouter } from 'express';
 import { OrderController } from '../controllers/order.controller';
-import { jwtMiddleware, requireAdmin } from '../middlewares/auth.middleware'; // 🔴 修正：匯入正確的名稱
+import {
+  jwtMiddleware,
+  optionalAuth,
+  requireAdmin,
+} from '../middlewares/auth.middleware'; // 🔴 修正：匯入正確的名稱
 
 const router: ExpressRouter = Router();
 
 // 🔴 套用正確的攔截器，防止 500 錯誤再次發生
-router.post('/', jwtMiddleware, OrderController.create);
+router.post('/', optionalAuth, OrderController.create);
 
 // Webhook 維持公開，不加攔截器
 router.post('/ecpay-webhook', OrderController.ecpayWebhook);

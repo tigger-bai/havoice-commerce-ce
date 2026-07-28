@@ -659,7 +659,7 @@ export class OrderController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
       const validatedData = CreateOrderSchema.parse(req.body);
-      const userId = (req as any).user.id;
+      const userId = getAuthenticatedUserId(req);
 
       const { order, ecpayPayload } = await OrderService.createOrder(validatedData, userId);
 
@@ -1083,18 +1083,22 @@ export class OrderController {
   static async findById(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const order = await OrderService.findById(id);
       const userId = getAuthenticatedUserId(req);
 
-      if (!isAdminUser(req) && order.userId !== userId) {
-        return res.status(403).json({
+      if (!userId) {
+        return res.status(401).json({
           success: false,
           error: {
-            message: '無權查看此訂單',
-            code: 'FORBIDDEN',
+            message: '未認證，請先登入',
+            code: 'UNAUTHORIZED',
           },
         });
       }
+
+      const order = await OrderService.findById(id, {
+        userId,
+        isAdmin: isAdminUser(req),
+      });
 
       return res.json({
         success: true,
