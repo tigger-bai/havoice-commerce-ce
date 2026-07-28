@@ -661,7 +661,10 @@ export class OrderController {
       const validatedData = CreateOrderSchema.parse(req.body);
       const userId = getAuthenticatedUserId(req);
 
-      const { order, ecpayPayload } = await OrderService.createOrder(validatedData, userId);
+      const { order, ecpayPayload, ecpayActionUrl } = await OrderService.createOrder(
+        validatedData,
+        userId,
+      );
 
       return res.status(201).json({
         success: true,
@@ -681,6 +684,7 @@ export class OrderController {
           })),
           createdAt: order.createdAt,
           ecpayPayload,
+          ecpayActionUrl,
         },
         message: ecpayPayload ? '訂單建立成功，準備導向金流支付' : '訂單建立成功 (貨到付款)',
       });

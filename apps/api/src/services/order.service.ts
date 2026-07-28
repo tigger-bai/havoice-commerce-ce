@@ -17,6 +17,7 @@ interface EcpayRuntimeConfig {
   hashIV: string;
   apiBaseUrl: string;
   webBaseUrl: string;
+  paymentUrl: string;
 }
 
 function cleanBaseUrl(value: string): string {
@@ -46,13 +47,79 @@ function getRuntimeEnv(name: string, devFallback?: string): string {
   throw new AppError(500, `缺少必要環境變數：${name}`, 'ENV_MISSING');
 }
 
+function getPublicBaseUrl(name: 'API_BASE_URL' | 'WEB_BASE_URL', devFallback?: string): string {
+  const value = cleanBaseUrl(getRuntimeEnv(name, devFallback));
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new AppError(500, `${name} 必須是有效的公開 URL`, 'INVALID_PUBLIC_URL');
+  }
+
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new AppError(500, `${name} 必須使用 HTTP 或 HTTPS`, 'INVALID_PUBLIC_URL');
+  }
+
+  const hostname = url.hostname.toLowerCase();
+  const isLocalHostname =
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname === '[::1]' ||
+    /^127\./.test(hostname) ||
+    /^192\.168\./.test(hostname);
+
+  if (isProduction && isLocalHostname) {
+    throw new AppError(
+      500,
+      `production 的 ${name} 必須使用綠界可連線的公開網址`,
+      'INVALID_PUBLIC_URL',
+    );
+  }
+
+  return value;
+}
+
+function getEcpayPaymentUrl(): string {
+  const value =
+    process.env.ECPAY_PAYMENT_URL?.trim() ||
+    (isProduction
+      ? 'https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5'
+      : 'https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5');
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new AppError(500, 'ECPAY_PAYMENT_URL 格式不正確', 'INVALID_ECPAY_PAYMENT_URL');
+  }
+
+  const allowedHosts = new Set(['payment-stage.ecpay.com.tw', 'payment.ecpay.com.tw']);
+  if (url.protocol !== 'https:' || !allowedHosts.has(url.hostname)) {
+    throw new AppError(
+      500,
+      'ECPAY_PAYMENT_URL 必須使用綠界測試或正式付款網址',
+      'INVALID_ECPAY_PAYMENT_URL',
+    );
+  }
+
+  return url.toString();
+}
+
+if (isProduction) {
+  getPublicBaseUrl('API_BASE_URL');
+  getPublicBaseUrl('WEB_BASE_URL');
+}
+
 function getEcpayRuntimeConfig(): EcpayRuntimeConfig {
   return {
     merchantId: getRuntimeEnv('ECPAY_MERCHANT_ID'),
     hashKey: getRuntimeEnv('ECPAY_HASH_KEY'),
     hashIV: getRuntimeEnv('ECPAY_HASH_IV'),
-    apiBaseUrl: cleanBaseUrl(getRuntimeEnv('API_BASE_URL')),
-    webBaseUrl: cleanBaseUrl(getRuntimeEnv('WEB_BASE_URL', 'http://localhost:3000')),
+    apiBaseUrl: getPublicBaseUrl('API_BASE_URL'),
+    webBaseUrl: getPublicBaseUrl('WEB_BASE_URL', 'http://localhost:3000'),
+    paymentUrl: getEcpayPaymentUrl(),
   };
 }
 
@@ -496,6 +563,7 @@ export class OrderService {
     });
 
     let ecpayPayload: Record<string, string> | null = null;
+    let ecpayActionUrl: string | null = null;
 
     /**
      * ATM / CREDIT_CARD 都走綠界 AIO。
@@ -506,6 +574,7 @@ export class OrderService {
      */
     if (paymentMethod === 'ATM' || paymentMethod === 'CREDIT_CARD') {
       const ecpayConfig = getEcpayRuntimeConfig();
+      ecpayActionUrl = ecpayConfig.paymentUrl;
 
       ecpayPayload = buildEcpayPayload({
         merchantTradeNo: order.orderNumber,
@@ -551,6 +620,7 @@ export class OrderService {
     return {
       order,
       ecpayPayload,
+      ecpayActionUrl,
     };
   }
 

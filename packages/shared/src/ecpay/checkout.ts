@@ -131,7 +131,7 @@ export function buildEcpayPayload(
     MerchantTradeDate: tradeDateStr,
     PaymentType: "aio",
     TotalAmount: Math.round(totalAmount).toString(),
-    TradeDesc: "快樂TV線上商城訂單",
+    TradeDesc: "快樂之音線上商城訂單",
     ItemName: safeItemName || "商品一批",
     ReturnURL: `${apiBaseUrl}/api/orders/ecpay-webhook`,
     OrderResultURL: `${webBaseUrl}/checkout/success?orderNo=${encodeURIComponent(orderNumber)}`,

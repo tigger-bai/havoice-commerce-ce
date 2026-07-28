@@ -8,20 +8,16 @@ import { useSession } from 'next-auth/react';
 import { useCartStore } from '@/store/useCartStore';
 import { formatPrice } from '@/lib/utils';
 import { api } from '@/lib/api-client';
+import { submitEcpayForm } from '@/lib/ecpay-form';
 import { CreateOrderSchema, resolveTaiwanPostalCode } from '@havoice/shared';
 import type { CreateOrderDTO, ShippingMethod, PaymentMethod } from '@havoice/shared';
 import { TAIWAN_CITIES, TAIWAN_DISTRICTS } from '@/lib/taiwan-districts';
 
 const DEV_API_BASE_URL = 'http://localhost:4000';
-const DEV_ECPAY_ACTION_URL = 'https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5';
 
 const PUBLIC_API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   (process.env.NODE_ENV !== 'production' ? DEV_API_BASE_URL : '');
-
-const PUBLIC_ECPAY_ACTION_URL =
-  process.env.NEXT_PUBLIC_ECPAY_AIO_CHECKOUT_URL ||
-  (process.env.NODE_ENV !== 'production' ? DEV_ECPAY_ACTION_URL : '');
 
 const CVS_BRANDS = [
   { value: 'UNIMART', label: '7-ELEVEN' },
@@ -58,7 +54,7 @@ interface CreateOrderResponse {
   orderNumber: string;
   totalAmount: number | string;
   itemCount: number;
-  actionUrl?: string;
+  ecpayActionUrl?: string;
   ecpayPayload?: Record<string, string>;
 }
 
@@ -313,23 +309,6 @@ export default function CheckoutPage() {
     window.open(url, 'ecpayCvsMap', 'width=1000,height=700,menubar=no,toolbar=no');
   };
 
-  const submitToEcpay = (actionUrl: string, payload: Record<string, string>) => {
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = actionUrl;
-
-    Object.entries(payload).forEach(([key, value]) => {
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = key;
-      input.value = value;
-      form.appendChild(input);
-    });
-
-    document.body.appendChild(form);
-    form.submit();
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFieldErrors({});
@@ -420,23 +399,25 @@ export default function CheckoutPage() {
     try {
       const order = await api.post<CreateOrderResponse>('/api/orders', validation.data);
 
-      clearCart();
-      sessionStorage.removeItem('checkout_draft');
-
-      if (order.ecpayPayload) {
-        const actionUrl = order.actionUrl || PUBLIC_ECPAY_ACTION_URL;
-
-        if (!actionUrl) {
+      if (formData.paymentMethod === 'ATM' || formData.paymentMethod === 'CREDIT_CARD') {
+        if (
+          !order.ecpayPayload ||
+          Object.keys(order.ecpayPayload).length === 0 ||
+          !order.ecpayActionUrl
+        ) {
           setFieldErrors({
-            _form: '系統尚未設定綠界付款網址，請聯絡管理員。',
+            _form: '付款資料不完整，尚未導向綠界，請稍後再試或聯絡管理員。',
           });
           setIsSubmitting(false);
           return;
         }
 
-        submitToEcpay(actionUrl, order.ecpayPayload);
+        submitEcpayForm(order.ecpayActionUrl, order.ecpayPayload);
         return;
       }
+
+      clearCart();
+      sessionStorage.removeItem('checkout_draft');
 
       sessionStorage.setItem(
         'lastOrder',
