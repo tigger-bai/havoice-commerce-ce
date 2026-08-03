@@ -15,12 +15,18 @@ import crypto from 'crypto';
 const ADMIN_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'EDITOR']);
 
 function getAuthenticatedUserId(req: Request): string | undefined {
-  const user = (req as any).user;
-  return user?.id || user?.userId;
+  const userId = req.user?.userId;
+
+  if (typeof userId !== 'string') {
+    return undefined;
+  }
+
+  const normalizedUserId = userId.trim();
+  return normalizedUserId || undefined;
 }
 
 function isAdminUser(req: Request): boolean {
-  const role = (req as any).user?.role;
+  const role = req.user?.role;
   return typeof role === 'string' && ADMIN_ROLES.has(role);
 }
 
@@ -700,7 +706,17 @@ export class OrderController {
   static async repay(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const userId = (req as any).user.id;
+      const userId = getAuthenticatedUserId(req);
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: {
+            message: '未認證',
+            code: 'UNAUTHORIZED',
+          },
+        });
+      }
 
       const { order, ecpayPayload } = await OrderService.buildRepayPayload(id, userId);
 
@@ -1136,7 +1152,17 @@ export class OrderController {
    */
   static async findMyOrders(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = (req as any).user.id;
+      const userId = getAuthenticatedUserId(req);
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: {
+            message: '未認證',
+            code: 'UNAUTHORIZED',
+          },
+        });
+      }
 
       const page = Number(req.query.page) || 1;
       const limit = Number(req.query.limit) || 10;

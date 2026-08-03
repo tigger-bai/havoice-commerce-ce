@@ -759,13 +759,23 @@ export class OrderService {
     return order;
   }
 
-  static async findByUserId(userId: string, page = 1, limit = 10) {
+  static async findByUserId(
+    userId: string | null | undefined,
+    page = 1,
+    limit = 10,
+  ) {
+    const authenticatedUserId = typeof userId === 'string' ? userId.trim() : '';
+
+    if (!authenticatedUserId) {
+      throw new AppError(401, '未認證', 'UNAUTHORIZED');
+    }
+
     const skip = (page - 1) * limit;
 
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where: {
-          userId,
+          userId: authenticatedUserId,
         },
         include: {
           items: true,
@@ -778,7 +788,7 @@ export class OrderService {
       }),
       prisma.order.count({
         where: {
-          userId,
+          userId: authenticatedUserId,
         },
       }),
     ]);
