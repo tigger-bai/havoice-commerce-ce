@@ -9,12 +9,37 @@ import { getRequiredEnv } from '../config/env';
 declare global {
   namespace Express {
     interface Request {
-      user?: AuthTokenPayload | any;
+      // Canonical principal field for both NextAuth sessions and Bearer JWTs.
+      user?: AuthTokenPayload;
     }
   }
 }
 
 const nextAuthSecret = getRequiredEnv('NEXTAUTH_SECRET');
+
+function normalizeUserId(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const userId = value.trim();
+  return userId || undefined;
+}
+
+function normalizeBearerPrincipal(
+  payload: AuthTokenPayload,
+): AuthTokenPayload | undefined {
+  const userId = normalizeUserId(payload.userId);
+
+  if (!userId) {
+    return undefined;
+  }
+
+  return {
+    ...payload,
+    userId,
+  };
+}
 
 export async function authenticateJWT(req: Request, res: Response, next: NextFunction) {
   try {
@@ -25,9 +50,11 @@ export async function authenticateJWT(req: Request, res: Response, next: NextFun
       secret: nextAuthSecret
     });
 
-    if (token && token.sub) {
+    const nextAuthUserId = normalizeUserId(token?.sub);
+
+    if (token && nextAuthUserId) {
       req.user = {
-        id: token.sub,
+        userId: nextAuthUserId,
         email: token.email as string,
         name: token.name as string,
         role: (token.role as string) || 'USER',
@@ -41,8 +68,12 @@ export async function authenticateJWT(req: Request, res: Response, next: NextFun
       const bearerStr = authHeader.split(' ')[1];
       try {
         const payload = AuthService.verifyToken(bearerStr);
-        req.user = payload;
-        return next();
+        const principal = normalizeBearerPrincipal(payload);
+
+        if (principal) {
+          req.user = principal;
+          return next();
+        }
       } catch (err) {
         console.warn('⚠️ [Auth Middleware] Bearer Token 驗證失敗');
       }
@@ -72,9 +103,11 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
   try {
     const token = await getToken({ req: req as any, secret: nextAuthSecret });
 
-    if (token && token.sub) {
+    const nextAuthUserId = normalizeUserId(token?.sub);
+
+    if (token && nextAuthUserId) {
       req.user = {
-        id: token.sub,
+        userId: nextAuthUserId,
         email: token.email as string,
         name: token.name as string,
         role: (token.role as string) || 'USER',
@@ -85,8 +118,12 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const bearerStr = authHeader.split(' ')[1];
       const payload = AuthService.verifyToken(bearerStr);
-      req.user = payload;
-      return next();
+      const principal = normalizeBearerPrincipal(payload);
+
+      if (principal) {
+        req.user = principal;
+        return next();
+      }
     }
 
     if (hasAuthCredentials) {
